@@ -1,0 +1,12 @@
+<roblox version="4">
+  <Item class="Folder" referent="0">
+    <Properties>
+      <string name="Name">Remotes</string>
+    </Properties>
+    <Item class="RemoteEvent" referent="1">
+      <Properties>
+        <string name="Name">CoinCollected</string>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>

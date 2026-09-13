@@ -1,11 +1,18 @@
-# Roblox place/model files — these are binary build output, not source.
-# Your source of truth is src/ plus default.project.json.
+# Roblox place/model files are build output, not source. Your source of truth
+# is src/ plus the .project.json files.
 *.rbxl
 *.rbxlx
 *.rbxl.lock
 *.rbxlx.lock
 *.rbxm
 *.rbxmx
+
+# EXCEPTION: build/ is committed on purpose. It is how this project ships to a
+# machine that only has Roblox Studio on it — no Rojo, no CLI, no git. The
+# tradeoff is binaries in git history; that is the price of a zero-install
+# workflow. If you later run Rojo locally, stop committing these.
+!build/*.rbxl
+!build/*.rbxmx
 
 # Toolchain managers
 /.rokit/

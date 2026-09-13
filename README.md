@@ -21,34 +21,45 @@ That's genuinely the whole first step. Do it before anything below.
 
 ## Step 2 — Get this code into Studio
 
-Studio saves your game as a single binary `.rbxl` file, which git can't diff or
-merge. The standard fix is **Rojo**: your scripts stay as normal `.luau` files in
-this repo, and Rojo live-syncs them into an open Studio session. Edit in VS Code,
-see it change in Studio instantly.
+Pick one. **Path A needs nothing installed but Studio** — that's the one to use
+if you just want to play the thing.
 
-**Install the tools** (Rokit pins the versions listed in `rokit.toml`):
+### Path A — open the prebuilt place (no install)
+
+Every change is built here and committed to [`build/`](build/). Download
+**`build/first-roblox-game.rbxl`** and open it in Studio. That's it — baseplate,
+spawn, coins and all the code, ready to press Play.
+
+**Updating later, once you've built a world:** do *not* open a newer `.rbxl`. It
+is a whole place file and would replace everything you made. Instead take the
+individual `.rbxmx` models, which carry only code:
+
+| Download | Right-click this in Studio → *Insert from File* |
+| --- | --- |
+| `build/Shared.rbxmx` | `ReplicatedStorage` |
+| `build/Remotes.rbxmx` | `ReplicatedStorage` |
+| `build/Server.rbxmx` | `ServerScriptService` |
+| `build/Client.rbxmx` | `StarterPlayer` → `StarterPlayerScripts` |
+
+Delete the old folder of the same name first, or you'll end up with `Server` and
+`Server1` and only one of them running.
+
+### Path B — live sync with Rojo (one small CLI)
+
+Worth it once Path A's download-and-drag gets tedious. Studio saves a place as
+one binary `.rbxl` that git can't diff or merge; Rojo keeps your scripts as
+normal `.luau` files here and syncs them into an open Studio session as you save.
 
 ```sh
-# Install Rokit itself: https://github.com/rojo-rbx/rokit
-rokit install
+rokit install       # installs the pinned tools — see rokit.toml
+rojo plugin install # one-time Studio plugin
+rojo serve          # then: Plugins tab → Rojo → Connect
 ```
 
-No Rokit? Install Rojo directly instead — <https://rojo.space/docs/v7/getting-started/installation/>
+Install Rokit first — <https://github.com/rojo-rbx/rokit>. No Rokit? Install Rojo
+directly: <https://rojo.space/docs/v7/getting-started/installation/>
 
-**Install the Studio plugin**, once:
-
-```sh
-rojo plugin install
-```
-
-**Start syncing:**
-
-```sh
-rojo serve
-```
-
-Then in Studio: the **Rojo** button in the Plugins tab → **Connect**. Your
-`src/` folder appears in the Explorer. Press Play and collect a coin.
+To rebuild the files in `build/` yourself: `./build.sh`
 
 > **One Studio setting you need:** scores are saved with `DataStoreService`,
 > which is switched off in Studio by default. Tick **File → Game Settings →
@@ -58,8 +69,12 @@ Then in Studio: the **Rojo** button in the Plugins tab → **Connect**. Your
 
 ## Step 3 — Change something
 
-Open `src/shared/Config.luau` and set `coinValue = 10`. Save. Studio updates
-without you doing anything else. That loop — edit, save, play — is the job.
+Open `src/shared/Config.luau` and set `coinValue = 10`.
+
+On Path B, save the file and Studio updates by itself. On Path A, either edit the
+same value directly in Studio (`ReplicatedStorage` → `Shared` → `Config`), or ask
+for a rebuilt `Shared.rbxmx`. Either way the loop — change, play, see it — is
+the job.
 
 ## Step 4 — Publish
 

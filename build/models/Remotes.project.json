@@ -1,0 +1,7 @@
+{
+  "name": "Remotes",
+  "tree": {
+    "$className": "Folder",
+    "CoinCollected": { "$className": "RemoteEvent" }
+  }
+}

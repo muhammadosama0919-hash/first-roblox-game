@@ -1,0 +1,374 @@
+<roblox version="4">
+  <Item class="Folder" referent="0">
+    <Properties>
+      <string name="Name">Server</string>
+    </Properties>
+    <Item class="Script" referent="1">
+      <Properties>
+        <string name="Name">Main</string>
+        <token name="RunContext">0</token>
+        <string name="Source"><![CDATA[--!strict
+--[[
+	Server-side game logic.
+
+	Runs in ServerScriptService, so players can never see or edit it. Anything
+	that decides "did you really earn this?" belongs here — never on the client.
+
+	What it does:
+	  1. Loads each player's saved progress, then gives them a `leaderstats`
+	     folder (this is what makes the scoreboard in the top-right appear).
+	  2. Spawns floating coins around the baseplate.
+	  3. Awards points when a player touches one, then respawns it.
+	  4. Saves progress on a timer, on leave, and on server shutdown.
+]]
+
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local PlayerData = require(script.Parent.PlayerData)
+
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
+
+local COIN_TAG = "Coin"
+
+local coinFolder = Instance.new("Folder")
+coinFolder.Name = "Coins"
+coinFolder.Parent = Workspace
+
+--[[
+	Load the player's save, then set up their scoreboard entry. Roblox looks for
+	a folder named exactly "leaderstats" inside the Player, and shows each value
+	inside it.
+]]
+local function onPlayerAdded(player: Player)
+	-- Load before building leaderstats, so the scoreboard shows the real total
+	-- immediately instead of flashing 0 and then jumping.
+	PlayerData.load(player)
+
+	-- Loading yields on a network call, so the player may have left while we
+	-- waited. Building UI on a departed player leaks the profile.
+	if not player:IsDescendantOf(Players) then
+		PlayerData.release(player)
+		return
+	end
+
+	local profile = PlayerData.get(player)
+
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Value = if profile then profile.coins else 0
+	coins.Parent = leaderstats
+
+	leaderstats.Parent = player
+end
+
+-- The profile is the source of truth; the IntValue is just what the scoreboard
+-- reads. Update the profile first, then mirror it.
+local function awardCoins(player: Player, amount: number)
+	local profile = PlayerData.get(player)
+	if not profile then
+		return
+	end
+
+	profile.coins += amount
+
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then
+		return
+	end
+
+	local coins = leaderstats:FindFirstChild("Coins")
+	if coins and coins:IsA("IntValue") then
+		coins.Value = profile.coins
+	end
+end
+
+-- A random point in a disc around the origin. Taking the square root of the
+-- random number spreads coins evenly instead of bunching them in the middle.
+local function randomCoinPosition(): Vector3
+	local angle = math.random() * math.pi * 2
+	local distance = math.sqrt(math.random()) * Config.coinSpawnRadius
+
+	return Vector3.new(
+		math.cos(angle) * distance,
+		Config.coinHeight,
+		math.sin(angle) * distance
+	)
+end
+
+local function spawnCoin()
+	local coin = Instance.new("Part")
+	coin.Name = "Coin"
+	coin.Shape = Enum.PartType.Cylinder
+	coin.Size = Vector3.new(0.4, 3, 3)
+	coin.Color = Color3.fromRGB(255, 201, 61)
+	coin.Material = Enum.Material.Neon
+	coin.Anchored = true
+	coin.CanCollide = false
+	coin.CFrame = CFrame.new(randomCoinPosition())
+
+	-- Touched can fire many times per contact, so guard against double-awards.
+	local collected = false
+
+	coin.Touched:Connect(function(hit: BasePart)
+		if collected then
+			return
+		end
+
+		local character = hit.Parent
+		if not character or not character:FindFirstChildOfClass("Humanoid") then
+			return
+		end
+
+		local player = Players:GetPlayerFromCharacter(character :: Model)
+		if not player then
+			return
+		end
+
+		collected = true
+		coin.CanTouch = false
+		coin.Transparency = 1
+
+		awardCoins(player, Config.coinValue)
+		-- Tell just this player's client so it can show a pickup popup.
+		coinCollected:FireClient(player, Config.coinValue)
+
+		task.delay(Config.coinRespawnSeconds, function()
+			coin.CFrame = CFrame.new(randomCoinPosition())
+			coin.Transparency = 0
+			coin.CanTouch = true
+			collected = false
+		end)
+	end)
+
+	-- Tagging lets the client find every coin without hardcoding paths.
+	CollectionService:AddTag(coin, COIN_TAG)
+	coin.Parent = coinFolder
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(function(player)
+	PlayerData.release(player)
+end)
+
+-- In Studio the local player can join before this script runs, so catch anyone
+-- who is already here. task.spawn because onPlayerAdded yields.
+for _, player in Players:GetPlayers() do
+	task.spawn(onPlayerAdded, player)
+end
+
+for _ = 1, Config.coinCount do
+	spawnCoin()
+end
+
+-- Autosave, so a server crash costs a minute of progress rather than all of it.
+task.spawn(function()
+	while true do
+		task.wait(Config.autosaveSeconds)
+
+		for _, player in Players:GetPlayers() do
+			task.spawn(PlayerData.save, player)
+		end
+	end
+end)
+
+--[[
+	PlayerRemoving does not reliably finish when the whole server is shutting
+	down, so save everyone one last time here. Roblox allows roughly 30 seconds
+	before killing the server, and saves run concurrently to stay well inside
+	that.
+]]
+game:BindToClose(function()
+	local players = Players:GetPlayers()
+	local pending = #players
+
+	if pending == 0 then
+		return
+	end
+
+	for _, player in players do
+		task.spawn(function()
+			PlayerData.save(player)
+			pending -= 1
+		end)
+	end
+
+	while pending > 0 do
+		task.wait()
+	end
+end)
+]]></string>
+      </Properties>
+    </Item>
+    <Item class="ModuleScript" referent="2">
+      <Properties>
+        <string name="Name">PlayerData</string>
+        <string name="Source"><![CDATA[--!strict
+--[[
+	Saving and loading player progress with DataStoreService.
+
+	Roblox gives every experience a key-value database that survives server
+	restarts. It is also the single easiest place in Roblox to lose player data,
+	so this module is deliberately paranoid:
+
+	  * Every request is wrapped in pcall. DataStore calls are network calls and
+	    they DO fail — treating a failure as "no data" is how saves get wiped.
+	  * A profile is only saved if it was successfully loaded first. See the
+	    guard in save(); it is the most important line in this file.
+	  * Loaded data is reconciled against a default template, so adding a new
+	    field later does not break players whose save predates it.
+]]
+
+local DataStoreService = game:GetService("DataStoreService")
+
+export type Profile = {
+	coins: number,
+}
+
+local DEFAULT_PROFILE: Profile = {
+	coins = 0,
+}
+
+-- Bump the version suffix if you ever change the shape of a Profile in a way
+-- old saves can't be reconciled into. Old data is left untouched under the old
+-- name rather than being corrupted.
+local store = DataStoreService:GetDataStore("PlayerData_v1")
+local KEY_PREFIX = "Player_"
+
+local MAX_ATTEMPTS = 3
+
+local profiles: { [number]: Profile } = {}
+-- True only once we have actually heard back from the DataStore for this
+-- player — including "you have no save yet", which is a valid answer.
+local isLoaded: { [number]: boolean } = {}
+
+local PlayerData = {}
+
+local function keyFor(player: Player): string
+	return KEY_PREFIX .. tostring(player.UserId)
+end
+
+--[[
+	Run a DataStore call, retrying with exponential backoff. Returns
+	(success, result) — never throws.
+]]
+local function withRetry(label: string, operation: () -> any): (boolean, any)
+	local backoff = 1
+
+	for attempt = 1, MAX_ATTEMPTS do
+		local ok, result = pcall(operation)
+		if ok then
+			return true, result
+		end
+
+		warn(string.format("[PlayerData] %s failed (%d/%d): %s", label, attempt, MAX_ATTEMPTS, tostring(result)))
+
+		-- By far the most common cause in Studio, and the error text is not
+		-- obvious about the fix.
+		if string.find(tostring(result), "403") or string.find(tostring(result), "API Services") then
+			warn("[PlayerData] In Studio, tick Game Settings -> Security -> Enable Studio Access to API Services.")
+		end
+
+		if attempt < MAX_ATTEMPTS then
+			task.wait(backoff)
+			backoff *= 2
+		end
+	end
+
+	return false, nil
+end
+
+-- Copy known fields off whatever came back, ignoring anything unexpected. A
+-- save written by an older version of the game is missing newer fields, and
+-- picks up their defaults here.
+local function reconcile(stored: any): Profile
+	local profile: Profile = { coins = DEFAULT_PROFILE.coins }
+
+	if typeof(stored) == "table" and typeof(stored.coins) == "number" then
+		profile.coins = stored.coins
+	end
+
+	return profile
+end
+
+--[[
+	Fetch this player's save. Yields. Always leaves a usable profile in memory,
+	even on failure — but marks an unrecoverable one as unsaveable so a later
+	save() cannot clobber real data with defaults.
+]]
+function PlayerData.load(player: Player)
+	local userId = player.UserId
+
+	local ok, stored = withRetry("load " .. player.Name, function()
+		return store:GetAsync(keyFor(player))
+	end)
+
+	if not ok then
+		profiles[userId] = reconcile(nil)
+		isLoaded[userId] = false
+		warn(string.format("[PlayerData] %s is playing on an unsaved session.", player.Name))
+		return
+	end
+
+	profiles[userId] = reconcile(stored)
+	isLoaded[userId] = true
+end
+
+function PlayerData.get(player: Player): Profile?
+	return profiles[player.UserId]
+end
+
+--[[
+	Write this player's profile back. Yields. Returns whether it stuck.
+]]
+function PlayerData.save(player: Player): boolean
+	local userId = player.UserId
+	local profile = profiles[userId]
+
+	if not profile then
+		return false
+	end
+
+	-- THE important guard. If the load failed we do not know what this player
+	-- already had, so writing now would replace a real save with a fresh zero.
+	-- Losing one session of progress is bad; erasing everything is worse.
+	if not isLoaded[userId] then
+		warn(string.format("[PlayerData] refusing to save %s — their data never loaded.", player.Name))
+		return false
+	end
+
+	local ok = withRetry("save " .. player.Name, function()
+		-- UpdateAsync rather than SetAsync: it serialises against a concurrent
+		-- write from another server, which happens when a player rejoins fast
+		-- enough that their old session is still shutting down.
+		store:UpdateAsync(keyFor(player), function()
+			return profile
+		end)
+		return nil
+	end)
+
+	return ok
+end
+
+--[[
+	Save and forget a player. Safe to call more than once.
+]]
+function PlayerData.release(player: Player)
+	PlayerData.save(player)
+	profiles[player.UserId] = nil
+	isLoaded[player.UserId] = nil
+end
+
+return PlayerData
+]]></string>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>
