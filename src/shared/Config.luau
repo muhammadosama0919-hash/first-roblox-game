@@ -26,18 +26,49 @@ export type Config = {
 	-- Humanoid stats before any shop bonuses. Roblox's own defaults.
 	baseWalkSpeed: number,
 	baseJumpPower: number,
+	-- Hold Shift to run. Multiplies whatever the walk speed currently is, so
+	-- it stacks with Swift Boots rather than overriding them.
+	sprintMultiplier: number,
+	-- Camera field of view, and how far it widens while sprinting. The widening
+	-- is most of why running feels fast.
+	baseFieldOfView: number,
+	sprintFieldOfView: number,
+
+	-- World generation.
+	worldSeed: number,
+	worldSize: number,
+	terrainCell: number,
+	terrainDepth: number,
+	hillHeight: number,
+	clearingRadius: number,
+	clearingFalloff: number,
+	treeCount: number,
+	treeClearRadius: number,
 }
 
 local Config: Config = {
 	coinValue = 1,
-	coinCount = 12,
+	coinCount = 22,
 	coinRespawnSeconds = 5,
-	coinSpawnRadius = 60,
+	coinSpawnRadius = 145,
 	coinHeight = 3,
 	coinSpinSpeed = 2,
 	autosaveSeconds = 60,
 	baseWalkSpeed = 16,
 	baseJumpPower = 50,
+	sprintMultiplier = 1.65,
+	baseFieldOfView = 70,
+	sprintFieldOfView = 82,
+
+	worldSeed = 20260913,
+	worldSize = 420,
+	terrainCell = 6,
+	terrainDepth = 24,
+	hillHeight = 17,
+	clearingRadius = 72,
+	clearingFalloff = 70,
+	treeCount = 90,
+	treeClearRadius = 34,
 }
 
 return table.freeze(Config)

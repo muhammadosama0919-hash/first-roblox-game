@@ -17,6 +17,9 @@
         },
         "PurchaseItem": {
           "$className": "RemoteFunction"
+        },
+        "SetSprinting": {
+          "$className": "RemoteEvent"
         }
       }
     },

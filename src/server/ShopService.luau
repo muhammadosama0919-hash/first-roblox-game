@@ -79,6 +79,18 @@ end
 	rather than adding to whatever the humanoid currently has, so calling it
 	twice cannot stack a bonus twice.
 ]]
+-- Players currently holding Shift. Cleared on leave by Main.
+local sprinting: { [number]: boolean } = {}
+
+function ShopService.setSprinting(player: Player, isSprinting: boolean)
+	sprinting[player.UserId] = isSprinting or nil
+	ShopService.applyEffects(player)
+end
+
+function ShopService.clearSprinting(player: Player)
+	sprinting[player.UserId] = nil
+end
+
 function ShopService.applyEffects(player: Player)
 	local profile = PlayerData.get(player)
 	if not profile then
@@ -103,6 +115,12 @@ function ShopService.applyEffects(player: Player)
 			walkSpeed += item.walkSpeedBonus or 0
 			jumpPower += item.jumpPowerBonus or 0
 		end
+	end
+
+	-- Sprint multiplies the total, so Swift Boots make running faster too
+	-- rather than being cancelled out by it.
+	if sprinting[player.UserId] then
+		walkSpeed *= Config.sprintMultiplier
 	end
 
 	humanoid.WalkSpeed = walkSpeed

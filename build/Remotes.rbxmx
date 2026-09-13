@@ -18,5 +18,10 @@
         <string name="Name">PurchaseItem</string>
       </Properties>
     </Item>
+    <Item class="RemoteEvent" referent="4">
+      <Properties>
+        <string name="Name">SetSprinting</string>
+      </Properties>
+    </Item>
   </Item>
 </roblox>

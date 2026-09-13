@@ -17,6 +17,9 @@
         },
         "PurchaseItem": {
           "$className": "RemoteFunction"
+        },
+        "SetSprinting": {
+          "$className": "RemoteEvent"
         }
       }
     },
@@ -39,31 +42,6 @@
       "$className": "Workspace",
       "$properties": {
         "FilteringEnabled": true
-      },
-      "Baseplate": {
-        "$className": "Part",
-        "$properties": {
-          "Size": [
-            512,
-            20,
-            512
-          ],
-          "Position": [
-            0,
-            -10,
-            0
-          ],
-          "Anchored": true,
-          "Locked": true,
-          "Material": "Grass",
-          "Color": [
-            0.42,
-            0.55,
-            0.36
-          ],
-          "TopSurface": "Smooth",
-          "BottomSurface": "Smooth"
-        }
       },
       "SpawnLocation": {
         "$className": "SpawnLocation",
@@ -93,14 +71,106 @@
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "Technology": "ShadowMap",
-        "Brightness": 2,
-        "ClockTime": 14,
+        "Technology": "Future",
+        "Brightness": 2.6,
+        "ClockTime": 16.2,
+        "GeographicLatitude": 22,
+        "ExposureCompensation": 0.12,
+        "GlobalShadows": true,
+        "ShadowSoftness": 0.32,
+        "EnvironmentDiffuseScale": 0.55,
+        "EnvironmentSpecularScale": 0.5,
+        "Ambient": [
+          0.09,
+          0.1,
+          0.13
+        ],
         "OutdoorAmbient": [
-          0.5,
-          0.5,
-          0.5
-        ]
+          0.34,
+          0.37,
+          0.45
+        ],
+        "ColorShift_Top": [
+          0.09,
+          0.06,
+          0.01
+        ],
+        "ColorShift_Bottom": [
+          0.01,
+          0.02,
+          0.05
+        ],
+        "FogColor": [
+          0.71,
+          0.77,
+          0.85
+        ],
+        "FogStart": 160,
+        "FogEnd": 1100
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.36,
+          "Offset": 0.2,
+          "Color": [
+            0.79,
+            0.83,
+            0.89
+          ],
+          "Decay": [
+            0.42,
+            0.47,
+            0.57
+          ],
+          "Glare": 0.4,
+          "Haze": 1.9
+        }
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.65,
+          "Size": 26,
+          "Threshold": 1.15
+        }
+      },
+      "ColorGrade": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Brightness": 0.015,
+          "Contrast": 0.14,
+          "Saturation": 0.13,
+          "TintColor": [
+            1.0,
+            0.985,
+            0.955
+          ]
+        }
+      },
+      "Depth": {
+        "$className": "DepthOfFieldEffect",
+        "$properties": {
+          "FarIntensity": 0.14,
+          "FocusDistance": 45,
+          "InFocusRadius": 220,
+          "NearIntensity": 0
+        }
+      },
+      "Sun": {
+        "$className": "SunRaysEffect",
+        "$properties": {
+          "Intensity": 0.08,
+          "Spread": 0.62
+        }
+      },
+      "Sky": {
+        "$className": "Sky",
+        "$properties": {
+          "StarCount": 0,
+          "SunAngularSize": 12,
+          "MoonAngularSize": 11
+        }
       }
     }
   }

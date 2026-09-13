@@ -155,14 +155,33 @@ src/
   server/               → ServerScriptService. Trusted. Decides the score.
     Main.server.luau      Coins, leaderstats, save/load lifecycle.
     PlayerData.luau       DataStore reads and writes.
-    ShopService.luau      Purchase validation and item effects.
+    ShopService.luau      Purchase validation, item effects, sprint state.
+    World.luau            Procedural terrain, trees and the cabin.
   client/               → StarterPlayerScripts. Runs on each player's machine.
     Main.client.luau      Coin spin, pickup popup.
     Shop.client.luau      Shop menu.
+    Sprint.client.luau    Hold Shift to run, plus the camera kick.
   shared/               → ReplicatedStorage. Both sides can read it.
     Config.luau           Tunable numbers.
     Shop.luau             Item list: names, prices, effects.
 ```
+
+### The world
+
+Terrain, trees and the cabin are generated in `World.luau` at server start, not
+placed by hand in Studio. Heights come from `math.noise`, which is deterministic
+— the same coordinates always give the same height, so every server builds an
+identical world without storing anything.
+
+The middle is flattened to a clearing so the spawn and the cabin sit level, then
+eased back into hills with a smoothstep so the join isn't a cliff. Reshaping the
+whole map is a matter of changing `hillHeight`, `worldSize` or `worldSeed` in
+`Config.luau`.
+
+Most of the visual difference, though, is `Lighting` in `place.project.json`:
+`Future` technology for real shadows, an `Atmosphere` for depth haze, and bloom,
+colour grading, depth of field and sun rays on top. That is the cheapest way to
+make simple geometry look deliberate — far cheaper than modelling.
 
 ### The shop
 

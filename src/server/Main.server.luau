@@ -21,13 +21,19 @@ local Workspace = game:GetService("Workspace")
 local Config = require(ReplicatedStorage.Shared.Config)
 local PlayerData = require(script.Parent.PlayerData)
 local ShopService = require(script.Parent.ShopService)
+local World = require(script.Parent.World)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
 local inventoryChanged = Remotes:WaitForChild("InventoryChanged") :: RemoteEvent
 local purchaseItem = Remotes:WaitForChild("PurchaseItem") :: RemoteFunction
+local setSprinting = Remotes:WaitForChild("SetSprinting") :: RemoteEvent
 
 local COIN_TAG = "Coin"
+
+-- Build terrain and scenery first: coins are placed relative to the ground,
+-- so the ground has to exist and its shape has to be known.
+local housePosition = World.build()
 
 local coinFolder = Instance.new("Folder")
 coinFolder.Name = "Coins"
@@ -104,13 +110,35 @@ local function awardCoins(player: Player, amount: number)
 	syncLeaderstats(player)
 end
 
--- A random point in a disc around the origin. Taking the square root of the
--- random number spreads coins evenly instead of bunching them in the middle.
-local function randomCoinPosition(): Vector3
-	local angle = math.random() * math.pi * 2
-	local distance = math.sqrt(math.random()) * Config.coinSpawnRadius
+--[[
+	A random point in a disc around the origin, floating just above the ground.
 
-	return Vector3.new(math.cos(angle) * distance, Config.coinHeight, math.sin(angle) * distance)
+	Taking the square root of the random number spreads coins evenly instead of
+	bunching them in the middle. Height comes from the same noise function the
+	terrain was built from, so a coin on a hillside floats at the same height
+	above the slope as one on flat ground.
+
+	Points landing inside the cabin footprint are retried rather than nudged —
+	nudging would pile coins against its walls.
+]]
+local function randomCoinPosition(): Vector3
+	for _ = 1, 30 do
+		local angle = math.random() * math.pi * 2
+		local distance = math.sqrt(math.random()) * Config.coinSpawnRadius
+
+		local x = math.cos(angle) * distance
+		local z = math.sin(angle) * distance
+
+		local insideCabin = math.abs(x - housePosition.X) < 18
+			and math.abs(z - housePosition.Z) < 16
+		if not insideCabin then
+			return Vector3.new(x, World.heightAt(x, z) + Config.coinHeight, z)
+		end
+	end
+
+	-- Every attempt hit the cabin, which should not happen with these numbers.
+	-- Fall back to somewhere valid rather than looping forever.
+	return Vector3.new(0, World.heightAt(0, 0) + Config.coinHeight, Config.coinSpawnRadius * 0.8)
 end
 
 local function spawnCoin()
@@ -182,8 +210,18 @@ purchaseItem.OnServerInvoke = function(player: Player, itemId: unknown)
 	return ok, message
 end
 
+--[[
+	The client tells us when Shift goes down and up. Sprint state lives on the
+	server so it composes with shop bonuses in one place — the client cannot
+	pick its own speed, only say which of two states it is in.
+]]
+setSprinting.OnServerEvent:Connect(function(player: Player, isSprinting: unknown)
+	ShopService.setSprinting(player, isSprinting == true)
+end)
+
 Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerRemoving:Connect(function(player)
+	ShopService.clearSprinting(player)
 	PlayerData.release(player)
 end)
 
