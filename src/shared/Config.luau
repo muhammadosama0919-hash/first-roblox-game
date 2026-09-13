@@ -20,6 +20,9 @@ export type Config = {
 	coinHeight: number,
 	-- Spin speed, in radians per second (client-side visual only).
 	coinSpinSpeed: number,
+	-- How often to write progress to the DataStore while a player is online,
+	-- so a server crash costs at most this much progress.
+	autosaveSeconds: number,
 }
 
 local Config: Config = {
@@ -29,6 +32,7 @@ local Config: Config = {
 	coinSpawnRadius = 60,
 	coinHeight = 3,
 	coinSpinSpeed = 2,
+	autosaveSeconds = 60,
 }
 
 return table.freeze(Config)

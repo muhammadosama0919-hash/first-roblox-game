@@ -50,6 +50,12 @@ rojo serve
 Then in Studio: the **Rojo** button in the Plugins tab → **Connect**. Your
 `src/` folder appears in the Explorer. Press Play and collect a coin.
 
+> **One Studio setting you need:** scores are saved with `DataStoreService`,
+> which is switched off in Studio by default. Tick **File → Game Settings →
+> Security → Enable Studio Access to API Services**, or every save fails with a
+> 403 and your coins reset each playtest. It works automatically in a published
+> game.
+
 ## Step 3 — Change something
 
 Open `src/shared/Config.luau` and set `coinValue = 10`. Save. Studio updates
@@ -127,9 +133,21 @@ default.project.json    Maps folders here → Roblox services. Rojo reads this.
 rokit.toml              Pinned tool versions.
 src/
   server/               → ServerScriptService. Trusted. Decides the score.
+    Main.server.luau      Coins, leaderstats, save/load lifecycle.
+    PlayerData.luau       DataStore reads and writes.
   client/               → StarterPlayerScripts. Runs on each player's machine.
+    Main.client.luau      Coin spin, pickup popup.
   shared/               → ReplicatedStorage. Both sides can read it.
+    Config.luau           Tunable numbers.
 ```
+
+### Saving
+
+Progress is written on a timer (`autosaveSeconds`), when a player leaves, and
+again on server shutdown via `BindToClose`. The rule that matters most is in
+`PlayerData.save`: a profile is never written unless it was successfully read
+first. A failed read is not an empty save — treating it as one is how Roblox
+games wipe their players' progress.
 
 The split matters more than anything else you'll learn early on. Players can
 modify anything running on their own client, so **the server must own every
@@ -148,8 +166,6 @@ File naming is a Rojo convention, not a Roblox one:
 
 ## What to build next
 
-- **Save the score.** Right now it resets when you leave. `DataStoreService` is
-  the fix, and it's the single biggest jump in making a game feel real.
 - **Make the world.** Build geometry by hand in Studio — it's much faster than
   code for anything visual. Only the parts in `src/` need to live in git.
 - **Add a goal.** A shop, a timer, a win condition. Coins with nothing to spend

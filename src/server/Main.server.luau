@@ -6,10 +6,11 @@
 	that decides "did you really earn this?" belongs here — never on the client.
 
 	What it does:
-	  1. Gives every player a `leaderstats` folder (this is what makes the
-	     scoreboard in the top-right corner appear).
+	  1. Loads each player's saved progress, then gives them a `leaderstats`
+	     folder (this is what makes the scoreboard in the top-right appear).
 	  2. Spawns floating coins around the baseplate.
 	  3. Awards points when a player touches one, then respawns it.
+	  4. Saves progress on a timer, on leave, and on server shutdown.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -18,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local PlayerData = require(script.Parent.PlayerData)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
@@ -29,33 +31,54 @@ coinFolder.Name = "Coins"
 coinFolder.Parent = Workspace
 
 --[[
-	Set up the player's scoreboard entry. Roblox looks for a folder named
-	exactly "leaderstats" inside the Player, and shows each value inside it.
+	Load the player's save, then set up their scoreboard entry. Roblox looks for
+	a folder named exactly "leaderstats" inside the Player, and shows each value
+	inside it.
 ]]
 local function onPlayerAdded(player: Player)
+	-- Load before building leaderstats, so the scoreboard shows the real total
+	-- immediately instead of flashing 0 and then jumping.
+	PlayerData.load(player)
+
+	-- Loading yields on a network call, so the player may have left while we
+	-- waited. Building UI on a departed player leaks the profile.
+	if not player:IsDescendantOf(Players) then
+		PlayerData.release(player)
+		return
+	end
+
+	local profile = PlayerData.get(player)
+
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
 
 	local coins = Instance.new("IntValue")
 	coins.Name = "Coins"
-	coins.Value = 0
+	coins.Value = if profile then profile.coins else 0
 	coins.Parent = leaderstats
 
 	leaderstats.Parent = player
 end
 
+-- The profile is the source of truth; the IntValue is just what the scoreboard
+-- reads. Update the profile first, then mirror it.
 local function awardCoins(player: Player, amount: number)
+	local profile = PlayerData.get(player)
+	if not profile then
+		return
+	end
+
+	profile.coins += amount
+
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
 		return
 	end
 
 	local coins = leaderstats:FindFirstChild("Coins")
-	if not coins or not coins:IsA("IntValue") then
-		return
+	if coins and coins:IsA("IntValue") then
+		coins.Value = profile.coins
 	end
-
-	coins.Value += amount
 end
 
 -- A random point in a disc around the origin. Taking the square root of the
@@ -122,13 +145,53 @@ local function spawnCoin()
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(function(player)
+	PlayerData.release(player)
+end)
 
 -- In Studio the local player can join before this script runs, so catch anyone
--- who is already here.
+-- who is already here. task.spawn because onPlayerAdded yields.
 for _, player in Players:GetPlayers() do
-	onPlayerAdded(player)
+	task.spawn(onPlayerAdded, player)
 end
 
 for _ = 1, Config.coinCount do
 	spawnCoin()
 end
+
+-- Autosave, so a server crash costs a minute of progress rather than all of it.
+task.spawn(function()
+	while true do
+		task.wait(Config.autosaveSeconds)
+
+		for _, player in Players:GetPlayers() do
+			task.spawn(PlayerData.save, player)
+		end
+	end
+end)
+
+--[[
+	PlayerRemoving does not reliably finish when the whole server is shutting
+	down, so save everyone one last time here. Roblox allows roughly 30 seconds
+	before killing the server, and saves run concurrently to stay well inside
+	that.
+]]
+game:BindToClose(function()
+	local players = Players:GetPlayers()
+	local pending = #players
+
+	if pending == 0 then
+		return
+	end
+
+	for _, player in players do
+		task.spawn(function()
+			PlayerData.save(player)
+			pending -= 1
+		end)
+	end
+
+	while pending > 0 do
+		task.wait()
+	end
+end)
