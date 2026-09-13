@@ -40,6 +40,9 @@
     },
     "Workspace": {
       "$className": "Workspace",
+      "Terrain": {
+        "$className": "Terrain"
+      },
       "$properties": {
         "FilteringEnabled": true
       },

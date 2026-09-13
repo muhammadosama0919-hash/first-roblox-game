@@ -37,6 +37,12 @@
           "$path": "src/client"
         }
       }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "Terrain": {
+        "$className": "Terrain"
+      }
     }
   }
 }

@@ -31,9 +31,25 @@ local setSprinting = Remotes:WaitForChild("SetSprinting") :: RemoteEvent
 
 local COIN_TAG = "Coin"
 
--- Build terrain and scenery first: coins are placed relative to the ground,
--- so the ground has to exist and its shape has to be known.
-local housePosition = World.build()
+--[[
+	Build terrain and scenery first: coins are placed relative to the ground, so
+	the ground has to exist and its shape has to be known.
+
+	Wrapped, because scenery is the least important thing in this script and was
+	briefly the only thing that mattered — a missing Terrain instance threw, and
+	took leaderstats, coins, saving and the shop down with it. A world that
+	fails to generate should cost you the world, not the game.
+]]
+local housePosition = Vector3.new(0, 0, -Config.clearingRadius * 0.55)
+
+local worldOk, worldErr = pcall(function()
+	housePosition = World.build()
+end)
+
+if not worldOk then
+	warn("[Main] World generation failed: " .. tostring(worldErr))
+	warn("[Main] Everything else still runs. Check the Output window for the error above.")
+end
 
 local coinFolder = Instance.new("Folder")
 coinFolder.Name = "Coins"

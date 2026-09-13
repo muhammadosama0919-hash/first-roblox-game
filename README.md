@@ -72,6 +72,17 @@ To rebuild the files in `build/` yourself: `./build.sh`
 > API Services**. Order matters — the toggle only means anything after the
 > place exists on Roblox.
 
+### When nothing happens
+
+If you press Play and the world is missing — just a spawn pad in empty sky —
+a script errored. Open **View → Output** in Studio. A red line there names the
+file and the reason, and it is almost always more specific than it looks.
+
+This has already bitten once: the place had no `Terrain` instance, so
+`World.luau` threw the moment it was required, which killed the whole server
+script. An empty world is what a dead server script looks like from inside the
+game. The Output window said so immediately.
+
 ## Step 3 — Change something
 
 Open `src/shared/Config.luau` and set `coinValue = 10`.
@@ -185,6 +196,11 @@ which does more for how the ground looks than any amount of scattered geometry.
 
 Reshaping the whole map is a matter of changing `hillHeight`, `worldSize`,
 `pondRadius` or `worldSeed` in `Config.luau`.
+
+World generation runs inside a `pcall`, and `Terrain` is resolved when the world
+is built rather than when the module loads. Scenery is the least important thing
+in the server script, and it should not be able to take leaderstats, coins,
+saving and the shop down with it — which is exactly what it did once.
 
 Most of the visual difference, though, is `Lighting` in `place.project.json`:
 `Future` technology for real shadows, an `Atmosphere` for depth haze, and bloom,

@@ -19,7 +19,12 @@ local Config = require(ReplicatedStorage.Shared.Config)
 
 local World = {}
 
-local terrain = Workspace.Terrain
+--[[
+	Set when there is no Terrain to build on and we fall back to a flat Part.
+	heightAt then reports level ground, so trees and coins sit on the fallback
+	instead of floating at hill heights that no longer exist.
+]]
+local groundIsFlat = false
 
 -- Colours picked to sit together rather than to be individually pretty.
 local BARK = Color3.fromRGB(88, 66, 48)
@@ -58,6 +63,10 @@ end
 	server builds the same world without storing anything.
 ]]
 function World.heightAt(x: number, z: number): number
+	if groundIsFlat then
+		return 0
+	end
+
 	local broad = math.noise(x / 190, z / 190, 7.3)
 	local detail = math.noise(x / 55, z / 55, 19.1) * 0.3
 	local height = (broad + detail) * Config.hillHeight
@@ -117,7 +126,7 @@ local function materialAt(x: number, z: number, height: number): Enum.Material
 	return Enum.Material.Grass
 end
 
-local function generateTerrain()
+local function generateTerrain(terrain: Terrain)
 	local half = Config.worldSize / 2
 	local cell = Config.terrainCell
 	local floor = -Config.terrainDepth
@@ -535,19 +544,47 @@ function World.build(): Vector3
 	scenery.Name = "Scenery"
 	scenery.Parent = Workspace
 
-	-- Animated grass blades on Grass terrain. One property, and it does more
-	-- for how the ground reads than any amount of scattered geometry.
-	terrain.Decoration = true
-	terrain.GrassLength = 0.6
+	--[[
+		Terrain is resolved here rather than at module scope. Reading it when
+		this module loads meant a place without one could not even be required,
+		which took the entire server script down with it — no coins, no shop,
+		no scoreboard, from one missing instance.
 
-	-- Water styling. The defaults are a flat cyan; this is closer to a pond.
-	terrain.WaterColor = Color3.fromRGB(38, 92, 104)
-	terrain.WaterTransparency = 0.72
-	terrain.WaterReflectance = 0.35
-	terrain.WaterWaveSize = 0.06
-	terrain.WaterWaveSpeed = 8
+		Instance.new("Terrain") is not allowed, so if it is genuinely absent the
+		only recourse is a Part.
+	]]
+	local terrain = Workspace:FindFirstChildOfClass("Terrain")
 
-	generateTerrain()
+	if terrain then
+		-- Animated grass blades on Grass terrain. One property, and it does
+		-- more for how the ground reads than any amount of scattered geometry.
+		terrain.Decoration = true
+		terrain.GrassLength = 0.6
+
+		-- Water styling. The default is a flat cyan; this is closer to a pond.
+		terrain.WaterColor = Color3.fromRGB(38, 92, 104)
+		terrain.WaterTransparency = 0.72
+		terrain.WaterReflectance = 0.35
+		terrain.WaterWaveSize = 0.06
+		terrain.WaterWaveSpeed = 8
+
+		generateTerrain(terrain)
+	else
+		groundIsFlat = true
+		warn("[World] This place has no Terrain instance, so there are no hills and no pond.")
+		warn(
+			'[World] Fix: add "Terrain": { "$className": "Terrain" } under Workspace in the project file.'
+		)
+
+		local ground = newPart(
+			"FallbackGround",
+			Vector3.new(Config.worldSize, 4, Config.worldSize),
+			CFrame.new(0, -2, 0),
+			Color3.fromRGB(106, 140, 78),
+			Enum.Material.Grass
+		)
+		ground.Parent = scenery
+	end
 
 	local housePosition = Vector3.new(0, 0, -Config.clearingRadius * 0.55)
 	buildHouse(housePosition, scenery)
@@ -555,7 +592,13 @@ function World.build(): Vector3
 	local trees = plantForest(scenery, housePosition)
 	scatterDetail(scenery, housePosition)
 
-	print(string.format("[World] terrain and pond built, %d trees planted", trees))
+	print(
+		string.format(
+			"[World] %s built, %d trees planted",
+			if groundIsFlat then "fallback ground" else "terrain and pond",
+			trees
+		)
+	)
 
 	return housePosition
 end
