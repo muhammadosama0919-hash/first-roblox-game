@@ -2,6 +2,14 @@
   "name": "Remotes",
   "tree": {
     "$className": "Folder",
-    "CoinCollected": { "$className": "RemoteEvent" }
+    "CoinCollected": {
+      "$className": "RemoteEvent"
+    },
+    "InventoryChanged": {
+      "$className": "RemoteEvent"
+    },
+    "PurchaseItem": {
+      "$className": "RemoteFunction"
+    }
   }
 }

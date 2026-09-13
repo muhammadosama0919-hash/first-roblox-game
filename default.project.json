@@ -2,7 +2,6 @@
   "name": "first-roblox-game",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
@@ -12,17 +11,21 @@
         "$className": "Folder",
         "CoinCollected": {
           "$className": "RemoteEvent"
+        },
+        "InventoryChanged": {
+          "$className": "RemoteEvent"
+        },
+        "PurchaseItem": {
+          "$className": "RemoteFunction"
         }
       }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
         "$path": "src/server"
       }
     },
-
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {

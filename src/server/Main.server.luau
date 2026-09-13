@@ -20,9 +20,12 @@ local Workspace = game:GetService("Workspace")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local PlayerData = require(script.Parent.PlayerData)
+local ShopService = require(script.Parent.ShopService)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
+local inventoryChanged = Remotes:WaitForChild("InventoryChanged") :: RemoteEvent
+local purchaseItem = Remotes:WaitForChild("PurchaseItem") :: RemoteFunction
 
 local COIN_TAG = "Coin"
 
@@ -58,17 +61,27 @@ local function onPlayerAdded(player: Player)
 	coins.Parent = leaderstats
 
 	leaderstats.Parent = player
+
+	-- Re-apply bonuses on every respawn, not just this one — a new character
+	-- starts with default WalkSpeed and JumpPower.
+	player.CharacterAdded:Connect(function()
+		ShopService.applyEffects(player)
+	end)
+
+	if player.Character then
+		ShopService.applyEffects(player)
+	end
+
+	inventoryChanged:FireClient(player, ShopService.inventoryOf(player))
 end
 
--- The profile is the source of truth; the IntValue is just what the scoreboard
--- reads. Update the profile first, then mirror it.
-local function awardCoins(player: Player, amount: number)
+-- The profile is the source of truth; the IntValue is only what the scoreboard
+-- reads. Anything that changes coins updates the profile, then calls this.
+local function syncLeaderstats(player: Player)
 	local profile = PlayerData.get(player)
 	if not profile then
 		return
 	end
-
-	profile.coins += amount
 
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
@@ -81,17 +94,23 @@ local function awardCoins(player: Player, amount: number)
 	end
 end
 
+local function awardCoins(player: Player, amount: number)
+	local profile = PlayerData.get(player)
+	if not profile then
+		return
+	end
+
+	profile.coins += amount
+	syncLeaderstats(player)
+end
+
 -- A random point in a disc around the origin. Taking the square root of the
 -- random number spreads coins evenly instead of bunching them in the middle.
 local function randomCoinPosition(): Vector3
 	local angle = math.random() * math.pi * 2
 	local distance = math.sqrt(math.random()) * Config.coinSpawnRadius
 
-	return Vector3.new(
-		math.cos(angle) * distance,
-		Config.coinHeight,
-		math.sin(angle) * distance
-	)
+	return Vector3.new(math.cos(angle) * distance, Config.coinHeight, math.sin(angle) * distance)
 end
 
 local function spawnCoin()
@@ -127,9 +146,11 @@ local function spawnCoin()
 		coin.CanTouch = false
 		coin.Transparency = 1
 
-		awardCoins(player, Config.coinValue)
-		-- Tell just this player's client so it can show a pickup popup.
-		coinCollected:FireClient(player, Config.coinValue)
+		-- Lucky Charm and friends are applied here, on the server. The client
+		-- is only told the result so it can show the right number.
+		local amount = math.floor(Config.coinValue * ShopService.coinMultiplier(player))
+		awardCoins(player, amount)
+		coinCollected:FireClient(player, amount)
 
 		task.delay(Config.coinRespawnSeconds, function()
 			coin.CFrame = CFrame.new(randomCoinPosition())
@@ -142,6 +163,23 @@ local function spawnCoin()
 	-- Tagging lets the client find every coin without hardcoding paths.
 	CollectionService:AddTag(coin, COIN_TAG)
 	coin.Parent = coinFolder
+end
+
+--[[
+	The one entry point a client has into the shop. It returns (ok, message)
+	rather than throwing, so a failed purchase is a message on screen instead
+	of an error in the client's console.
+]]
+purchaseItem.OnServerInvoke = function(player: Player, itemId: unknown)
+	local ok, message = ShopService.purchase(player, itemId)
+
+	if ok then
+		syncLeaderstats(player)
+		ShopService.applyEffects(player)
+		inventoryChanged:FireClient(player, ShopService.inventoryOf(player))
+	end
+
+	return ok, message
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)

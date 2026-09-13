@@ -18,10 +18,13 @@ local DataStoreService = game:GetService("DataStoreService")
 
 export type Profile = {
 	coins: number,
+	-- Shop item ids this player has bought, as a set.
+	owned: { [string]: boolean },
 }
 
 local DEFAULT_PROFILE: Profile = {
 	coins = 0,
+	owned = {},
 }
 
 -- Bump the version suffix if you ever change the shape of a Profile in a way
@@ -56,12 +59,24 @@ local function withRetry(label: string, operation: () -> any): (boolean, any)
 			return true, result
 		end
 
-		warn(string.format("[PlayerData] %s failed (%d/%d): %s", label, attempt, MAX_ATTEMPTS, tostring(result)))
+		warn(
+			string.format(
+				"[PlayerData] %s failed (%d/%d): %s",
+				label,
+				attempt,
+				MAX_ATTEMPTS,
+				tostring(result)
+			)
+		)
 
 		-- By far the most common cause in Studio, and the error text is not
 		-- obvious about the fix.
-		if string.find(tostring(result), "403") or string.find(tostring(result), "API Services") then
-			warn("[PlayerData] In Studio, tick Game Settings -> Security -> Enable Studio Access to API Services.")
+		if
+			string.find(tostring(result), "403") or string.find(tostring(result), "API Services")
+		then
+			warn(
+				"[PlayerData] In Studio, tick Game Settings -> Security -> Enable Studio Access to API Services."
+			)
 		end
 
 		if attempt < MAX_ATTEMPTS then
@@ -77,10 +92,26 @@ end
 -- save written by an older version of the game is missing newer fields, and
 -- picks up their defaults here.
 local function reconcile(stored: any): Profile
-	local profile: Profile = { coins = DEFAULT_PROFILE.coins }
+	-- Fresh tables, never shared with DEFAULT_PROFILE — two players must not
+	-- end up mutating the same `owned` table.
+	local profile: Profile = { coins = DEFAULT_PROFILE.coins, owned = {} }
 
-	if typeof(stored) == "table" and typeof(stored.coins) == "number" then
+	if typeof(stored) ~= "table" then
+		return profile
+	end
+
+	if typeof(stored.coins) == "number" then
 		profile.coins = stored.coins
+	end
+
+	-- Saves written before the shop existed have no `owned` field and simply
+	-- keep the empty default.
+	if typeof(stored.owned) == "table" then
+		for id, isOwned in stored.owned do
+			if typeof(id) == "string" and isOwned == true then
+				profile.owned[id] = true
+			end
+		end
 	end
 
 	return profile
@@ -128,7 +159,12 @@ function PlayerData.save(player: Player): boolean
 	-- already had, so writing now would replace a real save with a fresh zero.
 	-- Losing one session of progress is bad; erasing everything is worse.
 	if not isLoaded[userId] then
-		warn(string.format("[PlayerData] refusing to save %s — their data never loaded.", player.Name))
+		warn(
+			string.format(
+				"[PlayerData] refusing to save %s — their data never loaded.",
+				player.Name
+			)
+		)
 		return false
 	end
 

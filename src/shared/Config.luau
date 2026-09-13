@@ -23,6 +23,9 @@ export type Config = {
 	-- How often to write progress to the DataStore while a player is online,
 	-- so a server crash costs at most this much progress.
 	autosaveSeconds: number,
+	-- Humanoid stats before any shop bonuses. Roblox's own defaults.
+	baseWalkSpeed: number,
+	baseJumpPower: number,
 }
 
 local Config: Config = {
@@ -33,6 +36,8 @@ local Config: Config = {
 	coinHeight = 3,
 	coinSpinSpeed = 2,
 	autosaveSeconds = 60,
+	baseWalkSpeed = 16,
+	baseJumpPower = 50,
 }
 
 return table.freeze(Config)

@@ -150,11 +150,27 @@ src/
   server/               → ServerScriptService. Trusted. Decides the score.
     Main.server.luau      Coins, leaderstats, save/load lifecycle.
     PlayerData.luau       DataStore reads and writes.
+    ShopService.luau      Purchase validation and item effects.
   client/               → StarterPlayerScripts. Runs on each player's machine.
     Main.client.luau      Coin spin, pickup popup.
+    Shop.client.luau      Shop menu.
   shared/               → ReplicatedStorage. Both sides can read it.
     Config.luau           Tunable numbers.
+    Shop.luau             Item list: names, prices, effects.
 ```
+
+### The shop
+
+Three items: Swift Boots (faster), Spring Legs (higher jump), Lucky Charm
+(double coins). Bonuses re-apply on every respawn, since a new character starts
+with default stats.
+
+Buying goes through a RemoteFunction, and the server does not trust one word of
+the request. It looks the item up in the shared list rather than believing the
+client about what exists, reads the price from there, and re-checks ownership
+and balance before deducting anything. The client script only draws the menu and
+displays whatever the server says back — a player editing it can change what
+their own menu looks like and nothing else.
 
 ### Saving
 
@@ -183,8 +199,10 @@ File naming is a Rojo convention, not a Roblox one:
 
 - **Make the world.** Build geometry by hand in Studio — it's much faster than
   code for anything visual. Only the parts in `src/` need to live in git.
-- **Add a goal.** A shop, a timer, a win condition. Coins with nothing to spend
-  them on gets old in about thirty seconds.
+- **Give the shop more to sell.** Adding an item is one entry in
+  `src/shared/Shop.luau` — the menu and the purchase check both read that list.
+- **Add a win condition.** A timer, a round, a leaderboard. The shop gives coins
+  a purpose; a goal gives the session one.
 
 Useful reading:
 

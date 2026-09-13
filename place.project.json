@@ -2,7 +2,6 @@
   "name": "first-roblox-game",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
@@ -12,17 +11,21 @@
         "$className": "Folder",
         "CoinCollected": {
           "$className": "RemoteEvent"
+        },
+        "InventoryChanged": {
+          "$className": "RemoteEvent"
+        },
+        "PurchaseItem": {
+          "$className": "RemoteFunction"
         }
       }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
         "$path": "src/server"
       }
     },
-
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
@@ -32,48 +35,72 @@
         }
       }
     },
-
     "Workspace": {
       "$className": "Workspace",
       "$properties": {
         "FilteringEnabled": true
       },
-
       "Baseplate": {
         "$className": "Part",
         "$properties": {
-          "Size": [512, 20, 512],
-          "Position": [0, -10, 0],
+          "Size": [
+            512,
+            20,
+            512
+          ],
+          "Position": [
+            0,
+            -10,
+            0
+          ],
           "Anchored": true,
           "Locked": true,
           "Material": "Grass",
-          "Color": [0.42, 0.55, 0.36],
+          "Color": [
+            0.42,
+            0.55,
+            0.36
+          ],
           "TopSurface": "Smooth",
           "BottomSurface": "Smooth"
         }
       },
-
       "SpawnLocation": {
         "$className": "SpawnLocation",
         "$properties": {
-          "Size": [12, 1, 12],
-          "Position": [0, 0.5, 0],
+          "Size": [
+            12,
+            1,
+            12
+          ],
+          "Position": [
+            0,
+            0.5,
+            0
+          ],
           "Anchored": true,
           "Material": "Concrete",
-          "Color": [0.6, 0.6, 0.62],
+          "Color": [
+            0.6,
+            0.6,
+            0.62
+          ],
           "TopSurface": "Smooth",
           "BottomSurface": "Smooth"
         }
       }
     },
-
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
         "Technology": "ShadowMap",
         "Brightness": 2,
         "ClockTime": 14,
-        "OutdoorAmbient": [0.5, 0.5, 0.5]
+        "OutdoorAmbient": [
+          0.5,
+          0.5,
+          0.5
+        ]
       }
     }
   }

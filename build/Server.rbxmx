@@ -29,9 +29,12 @@ local Workspace = game:GetService("Workspace")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local PlayerData = require(script.Parent.PlayerData)
+local ShopService = require(script.Parent.ShopService)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
+local inventoryChanged = Remotes:WaitForChild("InventoryChanged") :: RemoteEvent
+local purchaseItem = Remotes:WaitForChild("PurchaseItem") :: RemoteFunction
 
 local COIN_TAG = "Coin"
 
@@ -67,17 +70,27 @@ local function onPlayerAdded(player: Player)
 	coins.Parent = leaderstats
 
 	leaderstats.Parent = player
+
+	-- Re-apply bonuses on every respawn, not just this one — a new character
+	-- starts with default WalkSpeed and JumpPower.
+	player.CharacterAdded:Connect(function()
+		ShopService.applyEffects(player)
+	end)
+
+	if player.Character then
+		ShopService.applyEffects(player)
+	end
+
+	inventoryChanged:FireClient(player, ShopService.inventoryOf(player))
 end
 
--- The profile is the source of truth; the IntValue is just what the scoreboard
--- reads. Update the profile first, then mirror it.
-local function awardCoins(player: Player, amount: number)
+-- The profile is the source of truth; the IntValue is only what the scoreboard
+-- reads. Anything that changes coins updates the profile, then calls this.
+local function syncLeaderstats(player: Player)
 	local profile = PlayerData.get(player)
 	if not profile then
 		return
 	end
-
-	profile.coins += amount
 
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
@@ -90,17 +103,23 @@ local function awardCoins(player: Player, amount: number)
 	end
 end
 
+local function awardCoins(player: Player, amount: number)
+	local profile = PlayerData.get(player)
+	if not profile then
+		return
+	end
+
+	profile.coins += amount
+	syncLeaderstats(player)
+end
+
 -- A random point in a disc around the origin. Taking the square root of the
 -- random number spreads coins evenly instead of bunching them in the middle.
 local function randomCoinPosition(): Vector3
 	local angle = math.random() * math.pi * 2
 	local distance = math.sqrt(math.random()) * Config.coinSpawnRadius
 
-	return Vector3.new(
-		math.cos(angle) * distance,
-		Config.coinHeight,
-		math.sin(angle) * distance
-	)
+	return Vector3.new(math.cos(angle) * distance, Config.coinHeight, math.sin(angle) * distance)
 end
 
 local function spawnCoin()
@@ -136,9 +155,11 @@ local function spawnCoin()
 		coin.CanTouch = false
 		coin.Transparency = 1
 
-		awardCoins(player, Config.coinValue)
-		-- Tell just this player's client so it can show a pickup popup.
-		coinCollected:FireClient(player, Config.coinValue)
+		-- Lucky Charm and friends are applied here, on the server. The client
+		-- is only told the result so it can show the right number.
+		local amount = math.floor(Config.coinValue * ShopService.coinMultiplier(player))
+		awardCoins(player, amount)
+		coinCollected:FireClient(player, amount)
 
 		task.delay(Config.coinRespawnSeconds, function()
 			coin.CFrame = CFrame.new(randomCoinPosition())
@@ -151,6 +172,23 @@ local function spawnCoin()
 	-- Tagging lets the client find every coin without hardcoding paths.
 	CollectionService:AddTag(coin, COIN_TAG)
 	coin.Parent = coinFolder
+end
+
+--[[
+	The one entry point a client has into the shop. It returns (ok, message)
+	rather than throwing, so a failed purchase is a message on screen instead
+	of an error in the client's console.
+]]
+purchaseItem.OnServerInvoke = function(player: Player, itemId: unknown)
+	local ok, message = ShopService.purchase(player, itemId)
+
+	if ok then
+		syncLeaderstats(player)
+		ShopService.applyEffects(player)
+		inventoryChanged:FireClient(player, ShopService.inventoryOf(player))
+	end
+
+	return ok, message
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
@@ -230,10 +268,13 @@ local DataStoreService = game:GetService("DataStoreService")
 
 export type Profile = {
 	coins: number,
+	-- Shop item ids this player has bought, as a set.
+	owned: { [string]: boolean },
 }
 
 local DEFAULT_PROFILE: Profile = {
 	coins = 0,
+	owned = {},
 }
 
 -- Bump the version suffix if you ever change the shape of a Profile in a way
@@ -268,12 +309,24 @@ local function withRetry(label: string, operation: () -> any): (boolean, any)
 			return true, result
 		end
 
-		warn(string.format("[PlayerData] %s failed (%d/%d): %s", label, attempt, MAX_ATTEMPTS, tostring(result)))
+		warn(
+			string.format(
+				"[PlayerData] %s failed (%d/%d): %s",
+				label,
+				attempt,
+				MAX_ATTEMPTS,
+				tostring(result)
+			)
+		)
 
 		-- By far the most common cause in Studio, and the error text is not
 		-- obvious about the fix.
-		if string.find(tostring(result), "403") or string.find(tostring(result), "API Services") then
-			warn("[PlayerData] In Studio, tick Game Settings -> Security -> Enable Studio Access to API Services.")
+		if
+			string.find(tostring(result), "403") or string.find(tostring(result), "API Services")
+		then
+			warn(
+				"[PlayerData] In Studio, tick Game Settings -> Security -> Enable Studio Access to API Services."
+			)
 		end
 
 		if attempt < MAX_ATTEMPTS then
@@ -289,10 +342,26 @@ end
 -- save written by an older version of the game is missing newer fields, and
 -- picks up their defaults here.
 local function reconcile(stored: any): Profile
-	local profile: Profile = { coins = DEFAULT_PROFILE.coins }
+	-- Fresh tables, never shared with DEFAULT_PROFILE — two players must not
+	-- end up mutating the same `owned` table.
+	local profile: Profile = { coins = DEFAULT_PROFILE.coins, owned = {} }
 
-	if typeof(stored) == "table" and typeof(stored.coins) == "number" then
+	if typeof(stored) ~= "table" then
+		return profile
+	end
+
+	if typeof(stored.coins) == "number" then
 		profile.coins = stored.coins
+	end
+
+	-- Saves written before the shop existed have no `owned` field and simply
+	-- keep the empty default.
+	if typeof(stored.owned) == "table" then
+		for id, isOwned in stored.owned do
+			if typeof(id) == "string" and isOwned == true then
+				profile.owned[id] = true
+			end
+		end
 	end
 
 	return profile
@@ -340,7 +409,12 @@ function PlayerData.save(player: Player): boolean
 	-- already had, so writing now would replace a real save with a fresh zero.
 	-- Losing one session of progress is bad; erasing everything is worse.
 	if not isLoaded[userId] then
-		warn(string.format("[PlayerData] refusing to save %s — their data never loaded.", player.Name))
+		warn(
+			string.format(
+				"[PlayerData] refusing to save %s — their data never loaded.",
+				player.Name
+			)
+		)
 		return false
 	end
 
@@ -367,6 +441,146 @@ function PlayerData.release(player: Player)
 end
 
 return PlayerData
+]]></string>
+      </Properties>
+    </Item>
+    <Item class="ModuleScript" referent="3">
+      <Properties>
+        <string name="Name">ShopService</string>
+        <string name="Source"><![CDATA[--!strict
+--[[
+	Buying things, and the effects of having bought them.
+
+	Every function here treats its arguments as hostile. A RemoteFunction can be
+	invoked by an exploiting client with any values it likes — a number where a
+	string belongs, an item id that does not exist, a purchase for something
+	already owned. The checks in purchase() are the only thing standing between
+	that and a free shop.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Shop = require(ReplicatedStorage.Shared.Shop)
+local PlayerData = require(script.Parent.PlayerData)
+
+local ShopService = {}
+
+--[[
+	Attempt a purchase. Returns (succeeded, message-to-show-the-player).
+
+	itemId is typed `unknown` on purpose: it arrives straight off the wire.
+]]
+function ShopService.purchase(player: Player, itemId: unknown): (boolean, string)
+	if typeof(itemId) ~= "string" then
+		return false, "Invalid request."
+	end
+
+	-- Look the item up in the shared list rather than trusting anything the
+	-- client said about it. The price used below is always ours.
+	local item = Shop.getItem(itemId)
+	if not item then
+		return false, "No such item."
+	end
+
+	local profile = PlayerData.get(player)
+	if not profile then
+		return false, "Your data is still loading — try again in a moment."
+	end
+
+	if profile.owned[item.id] then
+		return false, "You already own that."
+	end
+
+	if profile.coins < item.price then
+		return false, string.format("You need %d more coins.", item.price - profile.coins)
+	end
+
+	profile.coins -= item.price
+	profile.owned[item.id] = true
+
+	return true, string.format("Bought %s!", item.name)
+end
+
+--[[
+	Total coin multiplier from everything this player owns.
+]]
+function ShopService.coinMultiplier(player: Player): number
+	local profile = PlayerData.get(player)
+	if not profile then
+		return 1
+	end
+
+	local multiplier = 1
+	for _, item in Shop.items do
+		if profile.owned[item.id] and item.coinMultiplier then
+			multiplier *= item.coinMultiplier
+		end
+	end
+
+	return multiplier
+end
+
+--[[
+	Push owned movement bonuses onto the player's current character.
+
+	Called on spawn and after a purchase. Always recomputes from the base values
+	rather than adding to whatever the humanoid currently has, so calling it
+	twice cannot stack a bonus twice.
+]]
+function ShopService.applyEffects(player: Player)
+	local profile = PlayerData.get(player)
+	if not profile then
+		return
+	end
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+
+	local walkSpeed = Config.baseWalkSpeed
+	local jumpPower = Config.baseJumpPower
+
+	for _, item in Shop.items do
+		if profile.owned[item.id] then
+			walkSpeed += item.walkSpeedBonus or 0
+			jumpPower += item.jumpPowerBonus or 0
+		end
+	end
+
+	humanoid.WalkSpeed = walkSpeed
+	-- New characters default to the JumpHeight model; switch to JumpPower so
+	-- the bonus above means what it says.
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = jumpPower
+end
+
+--[[
+	What the client needs to draw the shop: which ids this player owns.
+]]
+function ShopService.inventoryOf(player: Player): { [string]: boolean }
+	local profile = PlayerData.get(player)
+	if not profile then
+		return {}
+	end
+
+	local owned: { [string]: boolean } = {}
+	for id, isOwned in profile.owned do
+		if isOwned then
+			owned[id] = true
+		end
+	end
+
+	return owned
+end
+
+return ShopService
 ]]></string>
       </Properties>
     </Item>

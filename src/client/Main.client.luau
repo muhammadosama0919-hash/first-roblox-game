@@ -17,10 +17,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- WaitForChild, not direct indexing: this script can start running before
--- ReplicatedStorage has finished replicating to the client.
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Config = require(Shared:WaitForChild("Config"))
+-- Wait for replication before requiring: this script can start running before
+-- ReplicatedStorage has finished replicating. The require itself uses a direct
+-- path so Luau's type solver can follow it.
+ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config")
+local Config = require(ReplicatedStorage.Shared.Config)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
