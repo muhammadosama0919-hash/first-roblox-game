@@ -10,12 +10,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Wait for replication, then require by direct path: Luau's type solver can
--- follow `ReplicatedStorage.Shared.Shop` but not a WaitForChild result, and we
--- want `Shop.Item` below to actually mean something.
-expect(expect(ReplicatedStorage, "Shared", "ReplicatedStorage"), "Shop", "ReplicatedStorage/Shared")
-local Shop = require(ReplicatedStorage.Shared.Shop)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -40,6 +34,12 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+-- Wait for replication, then require by direct path: Luau's type solver can
+-- follow `ReplicatedStorage.Shared.Shop` but not a WaitForChild result, and we
+-- want `Shop.Item` below to actually mean something.
+expect(expect(ReplicatedStorage, "Shared", "ReplicatedStorage"), "Shop", "ReplicatedStorage/Shared")
+local Shop = require(ReplicatedStorage.Shared.Shop)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local purchaseItem = expect(Remotes, "PurchaseItem", "ReplicatedStorage/Remotes") :: RemoteFunction

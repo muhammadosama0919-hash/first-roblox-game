@@ -25,16 +25,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- Wait for replication before requiring: this script can start running before
--- ReplicatedStorage has finished replicating. The require itself uses a direct
--- path so Luau's type solver can follow it.
-expect(
-	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
-	"Config",
-	"ReplicatedStorage/Shared"
-)
-local Config = require(ReplicatedStorage.Shared.Config)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -59,6 +49,16 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+-- Wait for replication before requiring: this script can start running before
+-- ReplicatedStorage has finished replicating. The require itself uses a direct
+-- path so Luau's type solver can follow it.
+expect(
+	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
+	"Config",
+	"ReplicatedStorage/Shared"
+)
+local Config = require(ReplicatedStorage.Shared.Config)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local coinCollected = expect(Remotes, "CoinCollected", "ReplicatedStorage/Remotes") :: RemoteEvent
@@ -134,12 +134,6 @@ end)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Wait for replication, then require by direct path: Luau's type solver can
--- follow `ReplicatedStorage.Shared.Shop` but not a WaitForChild result, and we
--- want `Shop.Item` below to actually mean something.
-expect(expect(ReplicatedStorage, "Shared", "ReplicatedStorage"), "Shop", "ReplicatedStorage/Shared")
-local Shop = require(ReplicatedStorage.Shared.Shop)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -164,6 +158,12 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+-- Wait for replication, then require by direct path: Luau's type solver can
+-- follow `ReplicatedStorage.Shared.Shop` but not a WaitForChild result, and we
+-- want `Shop.Item` below to actually mean something.
+expect(expect(ReplicatedStorage, "Shared", "ReplicatedStorage"), "Shop", "ReplicatedStorage/Shared")
+local Shop = require(ReplicatedStorage.Shared.Shop)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local purchaseItem = expect(Remotes, "PurchaseItem", "ReplicatedStorage/Remotes") :: RemoteFunction
@@ -401,13 +401,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-expect(
-	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
-	"Config",
-	"ReplicatedStorage/Shared"
-)
-local Config = require(ReplicatedStorage.Shared.Config)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -432,6 +425,13 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+expect(
+	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
+	"Config",
+	"ReplicatedStorage/Shared"
+)
+local Config = require(ReplicatedStorage.Shared.Config)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local setSprinting = expect(Remotes, "SetSprinting", "ReplicatedStorage/Remotes") :: RemoteEvent

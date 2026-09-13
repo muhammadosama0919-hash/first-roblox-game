@@ -14,13 +14,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-expect(
-	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
-	"Config",
-	"ReplicatedStorage/Shared"
-)
-local Config = require(ReplicatedStorage.Shared.Config)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -45,6 +38,13 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+expect(
+	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
+	"Config",
+	"ReplicatedStorage/Shared"
+)
+local Config = require(ReplicatedStorage.Shared.Config)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local setSprinting = expect(Remotes, "SetSprinting", "ReplicatedStorage/Remotes") :: RemoteEvent

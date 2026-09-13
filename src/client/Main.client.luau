@@ -17,16 +17,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- Wait for replication before requiring: this script can start running before
--- ReplicatedStorage has finished replicating. The require itself uses a direct
--- path so Luau's type solver can follow it.
-expect(
-	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
-	"Config",
-	"ReplicatedStorage/Shared"
-)
-local Config = require(ReplicatedStorage.Shared.Config)
-
 --[[
 	WaitForChild with a deadline and a real explanation.
 
@@ -51,6 +41,16 @@ local function expect(parent: Instance, name: string, where: string): Instance
 	end
 	return found
 end
+
+-- Wait for replication before requiring: this script can start running before
+-- ReplicatedStorage has finished replicating. The require itself uses a direct
+-- path so Luau's type solver can follow it.
+expect(
+	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
+	"Config",
+	"ReplicatedStorage/Shared"
+)
+local Config = require(ReplicatedStorage.Shared.Config)
 
 local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
 local coinCollected = expect(Remotes, "CoinCollected", "ReplicatedStorage/Remotes") :: RemoteEvent

@@ -556,12 +556,13 @@ function World.build(): Vector3
 	local terrain = Workspace:FindFirstChildOfClass("Terrain")
 
 	if terrain then
-		-- Animated grass blades on Grass terrain. One property, and it does
-		-- more for how the ground reads than any amount of scattered geometry.
-		terrain.Decoration = true
-		terrain.GrassLength = 0.6
-
-		-- Water styling. The default is a flat cyan; this is closer to a pond.
+		-- Decoration and GrassLength are tagged NotScriptable: they are real,
+		-- saveable properties, but assigning them from a script errors. They
+		-- are set on Terrain in the project file instead — same constraint as
+		-- Lighting.Technology.
+		--
+		-- Water styling IS scriptable. The default is a flat cyan; this is
+		-- closer to a pond.
 		terrain.WaterColor = Color3.fromRGB(38, 92, 104)
 		terrain.WaterTransparency = 0.72
 		terrain.WaterReflectance = 0.35
