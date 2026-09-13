@@ -185,6 +185,14 @@ again on server shutdown via `BindToClose`. The rule that matters most is in
 first. A failed read is not an empty save — treating it as one is how Roblox
 games wipe their players' progress.
 
+Studio and live servers use different store names (`PlayerData_v1_studio` vs
+`PlayerData_v1`). Data stores belong to the whole experience, so once this place
+is published, a Studio playtest would otherwise read and write the same saves
+real players use — a bad save routine tested in Studio could corrupt live data.
+The split is a convention held up by one line in `PlayerData.luau`, not a
+guarantee; the stronger version is a separately published test experience, which
+gets different data stores outright.
+
 Availability is probed once at server start rather than per player. In an
 unpublished place every request fails identically, and retrying on each join
 would stall every player for seconds and fill the console with the same

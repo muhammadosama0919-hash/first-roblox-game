@@ -265,6 +265,7 @@ end)
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
 
 export type Profile = {
 	coins: number,
@@ -277,10 +278,25 @@ local DEFAULT_PROFILE: Profile = {
 	owned = {},
 }
 
--- Bump the version suffix if you ever change the shape of a Profile in a way
--- old saves can't be reconciled into. Old data is left untouched under the old
--- name rather than being corrupted.
-local store = DataStoreService:GetDataStore("PlayerData_v1")
+--[[
+	Data stores belong to the whole experience, not to one place — every place
+	in a game, and every live server, reads the same database. Studio is no
+	exception: once this place is published and Studio API access is on, a
+	playtest reads and writes the SAME saves your real players use. A bad save
+	routine tested in Studio can therefore corrupt live data.
+
+	Branching the name gives Studio its own sandbox. This is a convention held
+	up by this one line, not a guarantee — the stronger version is a separately
+	published test experience, which gets different data stores outright. Doing
+	both means two things have to fail before real saves are at risk.
+
+	Bump the version suffix if you ever change Profile's shape in a way old
+	saves can't be reconciled into; old data is then left untouched under the
+	old name rather than corrupted.
+]]
+local STORE_NAME = if RunService:IsStudio() then "PlayerData_v1_studio" else "PlayerData_v1"
+
+local store = DataStoreService:GetDataStore(STORE_NAME)
 local KEY_PREFIX = "Player_"
 
 local MAX_ATTEMPTS = 3
