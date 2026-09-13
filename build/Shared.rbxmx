@@ -52,6 +52,20 @@ export type Config = {
 	clearingFalloff: number,
 	treeCount: number,
 	treeClearRadius: number,
+
+	-- Pond. The basin is carved out of the terrain and then filled with water
+	-- up to waterLevel, which sits below the rim so there is a visible bank.
+	pondCenterX: number,
+	pondCenterZ: number,
+	pondRadius: number,
+	pondDepth: number,
+	pondBankWidth: number,
+	waterLevel: number,
+
+	-- Scattered ground detail: rocks, bushes, reeds.
+	rockCount: number,
+	bushCount: number,
+	reedCount: number,
 }
 
 local Config: Config = {
@@ -77,6 +91,17 @@ local Config: Config = {
 	clearingFalloff = 70,
 	treeCount = 90,
 	treeClearRadius = 34,
+
+	pondCenterX = 86,
+	pondCenterZ = 62,
+	pondRadius = 46,
+	pondDepth = 11,
+	pondBankWidth = 26,
+	waterLevel = -1.5,
+
+	rockCount = 70,
+	bushCount = 110,
+	reedCount = 90,
 }
 
 return table.freeze(Config)

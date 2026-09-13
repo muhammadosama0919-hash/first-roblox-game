@@ -174,9 +174,17 @@ placed by hand in Studio. Heights come from `math.noise`, which is deterministic
 identical world without storing anything.
 
 The middle is flattened to a clearing so the spawn and the cabin sit level, then
-eased back into hills with a smoothstep so the join isn't a cliff. Reshaping the
-whole map is a matter of changing `hillHeight`, `worldSize` or `worldSeed` in
-`Config.luau`.
+eased back into hills with a smoothstep so the join isn't a cliff. The pond area
+is flattened the same way before its basin is carved, so the water line is level
+all the way round instead of cutting across a hillside.
+
+Ground material is chosen from the shape of the land rather than painted by
+hand: sand near the water line, rock on anything steep enough to read as a cliff
+face, grass everywhere else. `Terrain.Decoration` adds animated grass blades,
+which does more for how the ground looks than any amount of scattered geometry.
+
+Reshaping the whole map is a matter of changing `hillHeight`, `worldSize`,
+`pondRadius` or `worldSeed` in `Config.luau`.
 
 Most of the visual difference, though, is `Lighting` in `place.project.json`:
 `Future` technology for real shadows, an `Atmosphere` for depth haze, and bloom,

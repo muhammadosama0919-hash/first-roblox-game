@@ -753,30 +753,91 @@ local BEAM = Color3.fromRGB(96, 72, 52)
 local ROOF = Color3.fromRGB(122, 66, 58)
 local FLOOR = Color3.fromRGB(142, 108, 74)
 
+-- Smoothstep: 0 below `from`, 1 above `to`, with eased ends rather than a kink.
+local function smoothstep(value: number, from: number, to: number): number
+	local t = math.clamp((value - from) / (to - from), 0, 1)
+	return t * t * (3 - 2 * t)
+end
+
+--[[
+	How far a point is from the middle of the pond.
+]]
+function World.distanceToPond(x: number, z: number): number
+	local dx = x - Config.pondCenterX
+	local dz = z - Config.pondCenterZ
+	return math.sqrt(dx * dx + dz * dz)
+end
+
 --[[
 	Ground height at a point, before anything is built.
 
-	Two octaves of noise: a broad one for hills, a finer one for lumpiness. The
-	result is flattened to zero inside the clearing so the spawn and the cabin
-	sit on level ground, then eased back in over `clearingFalloff` studs so the
-	join is not a cliff.
+	Three things stacked, in order:
+	  1. Two octaves of noise — a broad one for hills, a finer one for lumps.
+	  2. Flattening, toward zero inside the clearing and around the pond, so the
+	     spawn, the cabin and the water line all sit on level ground.
+	  3. The pond basin, carved downward.
+
+	Deterministic: the same coordinates always give the same height, so every
+	server builds the same world without storing anything.
 ]]
 function World.heightAt(x: number, z: number): number
 	local broad = math.noise(x / 190, z / 190, 7.3)
 	local detail = math.noise(x / 55, z / 55, 19.1) * 0.3
+	local height = (broad + detail) * Config.hillHeight
 
-	local raw = (broad + detail) * Config.hillHeight
-
+	-- Flatten toward the middle.
 	local distance = math.sqrt(x * x + z * z)
-	if distance <= Config.clearingRadius then
-		return 0
+	height *= smoothstep(
+		distance,
+		Config.clearingRadius,
+		Config.clearingRadius + Config.clearingFalloff
+	)
+
+	-- Flatten around the pond too, so its bank is level all the way round
+	-- instead of the water line cutting across a hillside.
+	local pondDistance = World.distanceToPond(x, z)
+	local pondEdge = Config.pondRadius + Config.pondBankWidth
+	height *= smoothstep(pondDistance, Config.pondRadius, pondEdge)
+
+	-- Carve the basin: deepest in the middle, easing up to nothing at the rim.
+	if pondDistance < Config.pondRadius then
+		local bowl = 1 - smoothstep(pondDistance, 0, Config.pondRadius)
+		height -= Config.pondDepth * bowl
 	end
 
-	-- smoothstep, so the terrain leaves the clearing gently instead of kinking.
-	local t = math.clamp((distance - Config.clearingRadius) / Config.clearingFalloff, 0, 1)
-	local eased = t * t * (3 - 2 * t)
+	return height
+end
 
-	return raw * eased
+--[[
+	Which material a patch of ground should be.
+
+	Picked from the shape of the land rather than assigned by hand: anything
+	near the water line is sand, steep faces are rock, everything else is grass.
+	That is what stops the world looking like one flat green sheet.
+]]
+local function materialAt(x: number, z: number, height: number): Enum.Material
+	-- Shoreline: a band of sand either side of the water line, but only near
+	-- the pond, so puddle-height ground elsewhere stays grass.
+	if World.distanceToPond(x, z) < Config.pondRadius + Config.pondBankWidth * 0.25 then
+		if height < Config.waterLevel + 2.5 then
+			return Enum.Material.Sand
+		end
+	end
+
+	-- Slope from finite differences. A tall rise over a short distance reads as
+	-- a cliff face, and cliffs are not grassy.
+	local step = 5
+	local dx = World.heightAt(x + step, z) - World.heightAt(x - step, z)
+	local dz = World.heightAt(x, z + step) - World.heightAt(x, z - step)
+	local slope = math.sqrt(dx * dx + dz * dz) / (2 * step)
+
+	if slope > 0.62 then
+		return Enum.Material.Rock
+	elseif slope > 0.4 then
+		return Enum.Material.Ground
+	end
+
+	return Enum.Material.Grass
 end
 
 local function generateTerrain()
@@ -788,14 +849,31 @@ local function generateTerrain()
 		for z = -half, half - cell, cell do
 			-- Sample the centre of the cell rather than a corner, so columns
 			-- sit symmetrically on the underlying noise.
-			local height = World.heightAt(x + cell / 2, z + cell / 2)
+			local cx, cz = x + cell / 2, z + cell / 2
+			local height = World.heightAt(cx, cz)
 			local columnHeight = height - floor
 
 			if columnHeight > 0 then
 				terrain:FillBlock(
-					CFrame.new(x + cell / 2, floor + columnHeight / 2, z + cell / 2),
+					CFrame.new(cx, floor + columnHeight / 2, cz),
 					Vector3.new(cell, columnHeight, cell),
-					Enum.Material.Grass
+					materialAt(cx, cz, height)
+				)
+			end
+
+			-- Then flood the basin. Water goes in as a second pass on top of
+			-- the ground column, from the carved floor up to the water line.
+			--
+			-- Confined to the pond on purpose: the hills dip below the water
+			-- line in plenty of hollows, and without this check every one of
+			-- them would fill, scattering grass-bottomed puddles with no banks
+			-- or reeds across the whole map.
+			if height < Config.waterLevel and World.distanceToPond(cx, cz) < Config.pondRadius then
+				local depth = Config.waterLevel - height
+				terrain:FillBlock(
+					CFrame.new(cx, height + depth / 2, cz),
+					Vector3.new(cell, depth, cell),
+					Enum.Material.Water
 				)
 			end
 		end
@@ -1033,6 +1111,108 @@ local function buildHouse(origin: Vector3, parent: Instance)
 end
 
 --[[
+	Small things on the ground: boulders, bushes and pond reeds.
+
+	None of it is interactive — it exists so the eye has something to measure
+	distance against. A hillside with nothing on it reads as flat no matter how
+	well it is lit.
+]]
+local function scatterDetail(parent: Instance, housePosition: Vector3)
+	local rng = Random.new(Config.worldSeed + 991)
+	local half = Config.worldSize / 2 - 15
+
+	local function pick(): (number, number, number, number)
+		local x = rng:NextNumber(-half, half)
+		local z = rng:NextNumber(-half, half)
+		return x, z, World.heightAt(x, z), World.distanceToPond(x, z)
+	end
+
+	-- Boulders: anywhere except underwater and the immediate spawn area.
+	for _ = 1, Config.rockCount do
+		for _ = 1, 12 do
+			local x, z, y, pondDistance = pick()
+			if y > Config.waterLevel + 1 and math.sqrt(x * x + z * z) > 22 then
+				local size = rng:NextNumber(3, 9)
+				local rock = newPart(
+					"Rock",
+					Vector3.new(
+						size,
+						size * rng:NextNumber(0.5, 0.9),
+						size * rng:NextNumber(0.7, 1.2)
+					),
+					CFrame.new(x, y + size * 0.15, z)
+						* CFrame.Angles(
+							rng:NextNumber(-0.3, 0.3),
+							rng:NextNumber(0, 6.28),
+							rng:NextNumber(-0.3, 0.3)
+						),
+					-- Boulders near the pond match the sand, not the grass.
+					if pondDistance < Config.pondRadius + 14
+						then Color3.fromRGB(168, 156, 132)
+						else Color3.fromRGB(126, 124, 120),
+					Enum.Material.Rock
+				)
+				rock.Parent = parent
+				break
+			end
+		end
+	end
+
+	-- Bushes: clusters of squashed spheres, on grass only.
+	for _ = 1, Config.bushCount do
+		for _ = 1, 12 do
+			local x, z, y, pondDistance = pick()
+			if
+				y > Config.waterLevel + 3
+				and pondDistance > Config.pondRadius + 4
+				and math.sqrt(x * x + z * z) > 18
+			then
+				local size = rng:NextNumber(3.5, 7)
+				local bush = newPart(
+					"Bush",
+					Vector3.new(size, size * 0.7, size),
+					CFrame.new(x, y + size * 0.25, z),
+					if rng:NextNumber() < 0.5 then LEAF_DARK else LEAF_LIGHT,
+					Enum.Material.LeafyGrass
+				)
+				bush.Shape = Enum.PartType.Ball
+				bush.CanCollide = false
+				bush.Parent = parent
+				break
+			end
+		end
+	end
+
+	-- Reeds: thin blades, only in the shallows right at the water line.
+	for _ = 1, Config.reedCount do
+		for _ = 1, 12 do
+			local x, z, y, pondDistance = pick()
+			local inShallows = pondDistance < Config.pondRadius
+				and y > Config.waterLevel - 2.5
+				and y < Config.waterLevel + 1.2
+			if inShallows then
+				local height = rng:NextNumber(3, 6.5)
+				local reed = newPart(
+					"Reed",
+					Vector3.new(0.35, height, 0.35),
+					CFrame.new(x, y + height / 2, z)
+						* CFrame.Angles(
+							rng:NextNumber(-0.25, 0.25),
+							rng:NextNumber(0, 6.28),
+							rng:NextNumber(-0.25, 0.25)
+						),
+					Color3.fromRGB(118, 142, 78),
+					Enum.Material.Grass
+				)
+				reed.CanCollide = false
+				reed.Parent = parent
+				break
+			end
+		end
+	end
+end
+
+--[[
 	Scatter trees over the map, skipping the clearing and the cabin.
 
 	Candidates are rejected rather than nudged: nudging a rejected point tends
@@ -1078,13 +1258,27 @@ function World.build(): Vector3
 	scenery.Name = "Scenery"
 	scenery.Parent = Workspace
 
+	-- Animated grass blades on Grass terrain. One property, and it does more
+	-- for how the ground reads than any amount of scattered geometry.
+	terrain.Decoration = true
+	terrain.GrassLength = 0.6
+
+	-- Water styling. The defaults are a flat cyan; this is closer to a pond.
+	terrain.WaterColor = Color3.fromRGB(38, 92, 104)
+	terrain.WaterTransparency = 0.72
+	terrain.WaterReflectance = 0.35
+	terrain.WaterWaveSize = 0.06
+	terrain.WaterWaveSpeed = 8
+
 	generateTerrain()
 
 	local housePosition = Vector3.new(0, 0, -Config.clearingRadius * 0.55)
 	buildHouse(housePosition, scenery)
 
 	local trees = plantForest(scenery, housePosition)
-	print(string.format("[World] terrain built, %d trees planted", trees))
+	scatterDetail(scenery, housePosition)
+
+	print(string.format("[World] terrain and pond built, %d trees planted", trees))
 
 	return housePosition
 end
