@@ -46,7 +46,16 @@ local DEFAULT_PROFILE: Profile = {
 ]]
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_v1_studio" else "PlayerData_v1"
 
-local store = DataStoreService:GetDataStore(STORE_NAME)
+--[[
+	Resolved at startup, and nil when persistence is not possible.
+
+	GetDataStore is itself a failing call in an unpublished place — it throws
+	"You must publish this place to the web to access DataStore" rather than
+	handing back a store whose requests later fail. So it cannot sit bare at
+	module scope: doing so made requiring this module throw, which took the
+	whole server script down with it.
+]]
+local store: DataStore? = nil
 local KEY_PREFIX = "Player_"
 
 local MAX_ATTEMPTS = 3
@@ -59,8 +68,11 @@ local PROBE_KEY = "__availability_probe__"
 	published experience, so in a local unpublished .rbxl every request fails
 	the same way — retrying three times on each join would stall every player
 	for seconds and bury the console in identical warnings.
+
+	Starts false and is only turned on once a real request has come back. The
+	safe assumption is that saving does not work.
 ]]
-local storesAvailable = true
+local storesAvailable = false
 
 local profiles: { [number]: Profile } = {}
 -- True only once we have actually heard back from the DataStore for this
@@ -160,8 +172,16 @@ function PlayerData.load(player: Player)
 		return
 	end
 
+	-- Copied to a local so Luau can narrow away the optional.
+	local activeStore = store
+	if not activeStore then
+		profiles[userId] = reconcile(nil)
+		isLoaded[userId] = false
+		return
+	end
+
 	local ok, stored = withRetry("load " .. player.Name, function()
-		return store:GetAsync(keyFor(player))
+		return activeStore:GetAsync(keyFor(player))
 	end)
 
 	if not ok then
@@ -208,11 +228,16 @@ function PlayerData.save(player: Player): boolean
 		return false
 	end
 
+	local activeStore = store
+	if not activeStore then
+		return false
+	end
+
 	local ok = withRetry("save " .. player.Name, function()
 		-- UpdateAsync rather than SetAsync: it serialises against a concurrent
 		-- write from another server, which happens when a player rejoins fast
 		-- enough that their old session is still shutting down.
-		store:UpdateAsync(keyFor(player), function()
+		activeStore:UpdateAsync(keyFor(player), function()
 			return profile
 		end)
 		return nil
@@ -231,29 +256,16 @@ function PlayerData.release(player: Player)
 end
 
 --[[
-	Ask the DataStore one question at server start so the rest of the session
-	knows whether persistence is possible. Yields briefly, once, before any
-	player can join.
+	Explain, once, why nothing will be saved this session.
 ]]
-local function probeStores()
-	local ok, err = pcall(function()
-		return store:GetAsync(PROBE_KEY)
-	end)
-
-	if ok then
-		return
-	end
-
-	storesAvailable = false
-	local reason = tostring(err)
-
+local function reportUnavailable(reason: string)
 	warn("[PlayerData] Data stores unavailable — progress will NOT be saved this session.")
 	warn("[PlayerData] Everything else works; coins and purchases just reset when you stop.")
 
 	if
-		string.find(reason, "403")
+		string.find(reason, "publish")
+		or string.find(reason, "403")
 		or string.find(reason, "API Services")
-		or string.find(reason, "publish")
 	then
 		warn(
 			"[PlayerData] To enable saving: publish the place once (File > Publish to Roblox As...),"
@@ -266,6 +278,41 @@ local function probeStores()
 	end
 end
 
-probeStores()
+--[[
+	Work out at server start whether persistence is possible, without ever
+	throwing. Two separate calls can fail and both are guarded:
+
+	  1. GetDataStore, which throws outright in an unpublished place.
+	  2. The first real request, which can fail even when GetDataStore did not
+	     — an unpublished place is not the only reason saving can be off.
+
+	Yields briefly on the second, once, before any player can join.
+]]
+local function initialiseStore()
+	local gotStore, result = pcall(function()
+		return DataStoreService:GetDataStore(STORE_NAME)
+	end)
+
+	if not gotStore then
+		reportUnavailable(tostring(result))
+		return
+	end
+
+	local resolved = result :: DataStore
+
+	local reachable, err = pcall(function()
+		return resolved:GetAsync(PROBE_KEY)
+	end)
+
+	if not reachable then
+		reportUnavailable(tostring(err))
+		return
+	end
+
+	store = resolved
+	storesAvailable = true
+end
+
+initialiseStore()
 
 return PlayerData

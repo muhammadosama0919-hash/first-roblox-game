@@ -78,10 +78,20 @@ If you press Play and the world is missing — just a spawn pad in empty sky —
 a script errored. Open **View → Output** in Studio. A red line there names the
 file and the reason, and it is almost always more specific than it looks.
 
-This has already bitten once: the place had no `Terrain` instance, so
-`World.luau` threw the moment it was required, which killed the whole server
-script. An empty world is what a dead server script looks like from inside the
-game. The Output window said so immediately.
+This has bitten twice, both the same shape — a module doing something
+failure-prone at load time, so `require` threw and took the whole server script
+with it. An empty world is what a dead server script looks like from inside the
+game. The Output window named both immediately:
+
+- No `Terrain` instance, so `World.luau` threw on `Workspace.Terrain`.
+- `GetDataStore` throws outright in an unpublished place — it does not hand back
+  a store whose requests later fail — so `PlayerData.luau` threw on line 49.
+
+Hence the rule this code now follows: **no module may throw while loading.**
+Anything that can fail is wrapped, resolved late, and degrades with a message
+rather than taking its callers down. `WaitForChild` calls carry deadlines too,
+since one without a timeout turns a missing instance into a silent permanent
+stall with nothing in Output at all.
 
 ## Step 3 — Change something
 

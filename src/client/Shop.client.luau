@@ -13,12 +13,38 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- Wait for replication, then require by direct path: Luau's type solver can
 -- follow `ReplicatedStorage.Shared.Shop` but not a WaitForChild result, and we
 -- want `Shop.Item` below to actually mean something.
-ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Shop")
+expect(expect(ReplicatedStorage, "Shared", "ReplicatedStorage"), "Shop", "ReplicatedStorage/Shared")
 local Shop = require(ReplicatedStorage.Shared.Shop)
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local purchaseItem = Remotes:WaitForChild("PurchaseItem") :: RemoteFunction
-local inventoryChanged = Remotes:WaitForChild("InventoryChanged") :: RemoteEvent
+--[[
+	WaitForChild with a deadline and a real explanation.
+
+	A bare WaitForChild never gives up, so a missing instance does not error —
+	the script just stops, silently, forever. That is harder to diagnose than a
+	crash, because the Output window stays empty. This turns it into a named
+	failure that says which instance and where to add it.
+]]
+local function expect(parent: Instance, name: string, where: string): Instance
+	local found = parent:WaitForChild(name, 10)
+	if not found then
+		error(
+			string.format(
+				"[%s] Missing %s.%s after 10s. Declare it under %s in the project file.",
+				where,
+				parent.Name,
+				name,
+				where
+			),
+			0
+		)
+	end
+	return found
+end
+
+local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
+local purchaseItem = expect(Remotes, "PurchaseItem", "ReplicatedStorage/Remotes") :: RemoteFunction
+local inventoryChanged =
+	expect(Remotes, "InventoryChanged", "ReplicatedStorage/Remotes") :: RemoteEvent
 
 local BACKDROP = Color3.fromRGB(24, 26, 33)
 local PANEL = Color3.fromRGB(36, 39, 48)

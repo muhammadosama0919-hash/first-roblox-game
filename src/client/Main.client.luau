@@ -20,11 +20,40 @@ local TweenService = game:GetService("TweenService")
 -- Wait for replication before requiring: this script can start running before
 -- ReplicatedStorage has finished replicating. The require itself uses a direct
 -- path so Luau's type solver can follow it.
-ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config")
+expect(
+	expect(ReplicatedStorage, "Shared", "ReplicatedStorage"),
+	"Config",
+	"ReplicatedStorage/Shared"
+)
 local Config = require(ReplicatedStorage.Shared.Config)
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local coinCollected = Remotes:WaitForChild("CoinCollected") :: RemoteEvent
+--[[
+	WaitForChild with a deadline and a real explanation.
+
+	A bare WaitForChild never gives up, so a missing instance does not error —
+	the script just stops, silently, forever. That is harder to diagnose than a
+	crash, because the Output window stays empty. This turns it into a named
+	failure that says which instance and where to add it.
+]]
+local function expect(parent: Instance, name: string, where: string): Instance
+	local found = parent:WaitForChild(name, 10)
+	if not found then
+		error(
+			string.format(
+				"[%s] Missing %s.%s after 10s. Declare it under %s in the project file.",
+				where,
+				parent.Name,
+				name,
+				where
+			),
+			0
+		)
+	end
+	return found
+end
+
+local Remotes = expect(ReplicatedStorage, "Remotes", "ReplicatedStorage")
+local coinCollected = expect(Remotes, "CoinCollected", "ReplicatedStorage/Remotes") :: RemoteEvent
 
 local COIN_TAG = "Coin"
 
