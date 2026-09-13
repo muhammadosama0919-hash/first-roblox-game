@@ -63,6 +63,63 @@ published game beats a perfect unpublished one.
 
 ---
 
+## Connecting Claude directly to Studio
+
+Roblox Studio now ships an **MCP server built in**, which lets an AI client drive
+your open place directly — read and edit scripts, run Luau, start a playtest,
+read the console, even take viewport screenshots. Claude Code is a supported
+client by name.
+
+**This only works with Claude Code installed on the same machine as Studio.**
+Everything talks over stdio between two local processes. There is no network
+transport and no hosted endpoint, so a cloud-hosted assistant cannot reach it.
+
+1. Update Roblox Studio to the latest version, and open your place.
+2. Install Claude Code on that same machine:
+   - macOS: `curl -fsSL https://claude.ai/install.sh | bash`
+   - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
+3. In Studio: **Assistant → `...` → Manage MCP Servers → Enable Studio as MCP server**.
+4. In that same panel, open **Quick connect** and toggle on **Claude Code**.
+   Studio writes the config for you. If Claude Code isn't listed, install it
+   first and restart Studio.
+5. Restart Studio and Claude Code. Look for the green connected indicator.
+6. Smoke test: `cd` into this repo, run `claude`, and ask it to insert a Part
+   into Workspace.
+
+If you'd rather configure it by hand, this is Roblox's published config:
+
+```jsonc
+// macOS
+{"mcpServers":{"Roblox_Studio":{"command":"/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP"}}}
+
+// Windows
+{"mcpServers":{"Roblox_Studio":{"command":"cmd.exe","args":["/c","%LOCALAPPDATA%\\Roblox\\mcp.bat"]}}}
+```
+
+> **Watch out:** searching for "roblox mcp" turns up many third-party servers on
+> npm and GitHub. None of them are official. The built-in Studio server is the
+> one to use — install nothing from npm for this. Roblox's older standalone
+> `studio-rust-mcp-server` repo was archived in April 2026; don't start there.
+
+### Using it alongside Rojo
+
+The two tools do different jobs and compose well:
+
+| | Rojo | Studio MCP |
+| --- | --- | --- |
+| Operates on | files in this repo | the live open place |
+| Gives you | version control, code review, history | reading the DataModel, running code, playtesting |
+
+Run `rojo serve` in its own terminal window — **not** as a Claude Code background
+task, which dies when the turn ends. Keep the plugin's optional two-way sync
+**off** unless you want it, or Studio's edits and Claude's edits will fight.
+
+On Windows, install Claude Code natively and keep the repo on the Windows
+filesystem. Running it inside WSL against `/mnt/c` breaks file watching silently
+— WSL2 doesn't propagate change notifications across that boundary.
+
+---
+
 ## How the code is organised
 
 ```

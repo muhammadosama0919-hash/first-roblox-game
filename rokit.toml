@@ -1,5 +1,10 @@
 # Rokit pins the exact tool versions this project uses, so every machine that
 # checks out this repo builds it the same way. Run `rokit install` after cloning.
 [tools]
-rojo = "rojo-rbx/rojo@7.7.0"
+# Deliberately pinned to 7.6.1, NOT the newer 7.7.0. Rojo 7.7.0 has an open
+# regression (rojo-rbx/rojo#1300) where `rojo serve` silently stops detecting
+# files created AFTER the server starts. That is fatal to an AI-assisted
+# workflow, which creates new files constantly. There is no fixed release yet,
+# so the fix is to stay on 7.6.1 rather than upgrade.
+rojo = "rojo-rbx/rojo@7.6.1"
 stylua = "JohnnyMorganz/StyLua@2.5.2"
