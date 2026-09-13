@@ -61,11 +61,16 @@ directly: <https://rojo.space/docs/v7/getting-started/installation/>
 
 To rebuild the files in `build/` yourself: `./build.sh`
 
-> **One Studio setting you need:** scores are saved with `DataStoreService`,
-> which is switched off in Studio by default. Tick **File → Game Settings →
-> Security → Enable Studio Access to API Services**, or every save fails with a
-> 403 and your coins reset each playtest. It works automatically in a published
-> game.
+> **Saving needs a published place.** Everything else — coins, the shop, the
+> movement bonuses — works straight out of the downloaded file. But saving uses
+> `DataStoreService`, and data stores belong to a *published* experience, so a
+> local `.rbxl` has nothing to save against. The game notices this at startup,
+> says so once in the Output window, and plays on without persisting.
+>
+> To turn saving on, publish once (**File → Publish to Roblox As...**, free),
+> then tick **File → Experience Settings → Security → Enable Studio Access to
+> API Services**. Order matters — the toggle only means anything after the
+> place exists on Roblox.
 
 ## Step 3 — Change something
 
@@ -179,6 +184,11 @@ again on server shutdown via `BindToClose`. The rule that matters most is in
 `PlayerData.save`: a profile is never written unless it was successfully read
 first. A failed read is not an empty save — treating it as one is how Roblox
 games wipe their players' progress.
+
+Availability is probed once at server start rather than per player. In an
+unpublished place every request fails identically, and retrying on each join
+would stall every player for seconds and fill the console with the same
+warning. Offline, the game runs normally and simply doesn't persist.
 
 The split matters more than anything else you'll learn early on. Players can
 modify anything running on their own client, so **the server must own every

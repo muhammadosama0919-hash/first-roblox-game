@@ -34,6 +34,17 @@ local store = DataStoreService:GetDataStore("PlayerData_v1")
 local KEY_PREFIX = "Player_"
 
 local MAX_ATTEMPTS = 3
+local PROBE_KEY = "__availability_probe__"
+
+--[[
+	Whether this server can reach the DataStore at all.
+
+	Decided once at startup rather than per player. Data stores belong to a
+	published experience, so in a local unpublished .rbxl every request fails
+	the same way — retrying three times on each join would stall every player
+	for seconds and bury the console in identical warnings.
+]]
+local storesAvailable = true
 
 local profiles: { [number]: Profile } = {}
 -- True only once we have actually heard back from the DataStore for this
@@ -125,6 +136,14 @@ end
 function PlayerData.load(player: Player)
 	local userId = player.UserId
 
+	-- Already known to be offline: hand back a fresh profile immediately and
+	-- skip the doomed round trip. The game plays normally, it just won't save.
+	if not storesAvailable then
+		profiles[userId] = reconcile(nil)
+		isLoaded[userId] = false
+		return
+	end
+
 	local ok, stored = withRetry("load " .. player.Name, function()
 		return store:GetAsync(keyFor(player))
 	end)
@@ -152,6 +171,11 @@ function PlayerData.save(player: Player): boolean
 	local profile = profiles[userId]
 
 	if not profile then
+		return false
+	end
+
+	-- Nothing to say here; the reason was already reported once at startup.
+	if not storesAvailable then
 		return false
 	end
 
@@ -189,5 +213,43 @@ function PlayerData.release(player: Player)
 	profiles[player.UserId] = nil
 	isLoaded[player.UserId] = nil
 end
+
+--[[
+	Ask the DataStore one question at server start so the rest of the session
+	knows whether persistence is possible. Yields briefly, once, before any
+	player can join.
+]]
+local function probeStores()
+	local ok, err = pcall(function()
+		return store:GetAsync(PROBE_KEY)
+	end)
+
+	if ok then
+		return
+	end
+
+	storesAvailable = false
+	local reason = tostring(err)
+
+	warn("[PlayerData] Data stores unavailable — progress will NOT be saved this session.")
+	warn("[PlayerData] Everything else works; coins and purchases just reset when you stop.")
+
+	if
+		string.find(reason, "403")
+		or string.find(reason, "API Services")
+		or string.find(reason, "publish")
+	then
+		warn(
+			"[PlayerData] To enable saving: publish the place once (File > Publish to Roblox As...),"
+		)
+		warn(
+			'[PlayerData] then tick File > Experience Settings > Security > "Enable Studio Access to API Services".'
+		)
+	else
+		warn("[PlayerData] Reason: " .. reason)
+	end
+end
+
+probeStores()
 
 return PlayerData
