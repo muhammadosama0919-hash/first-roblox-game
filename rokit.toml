@@ -1,0 +1,5 @@
+# Rokit pins the exact tool versions this project uses, so every machine that
+# checks out this repo builds it the same way. Run `rokit install` after cloning.
+[tools]
+rojo = "rojo-rbx/rojo@7.7.0"
+stylua = "JohnnyMorganz/StyLua@2.5.2"

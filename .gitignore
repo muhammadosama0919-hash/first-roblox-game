@@ -1,0 +1,16 @@
+# Roblox place/model files — these are binary build output, not source.
+# Your source of truth is src/ plus default.project.json.
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm
+*.rbxmx
+
+# Toolchain managers
+/.rokit/
+/.aftman/
+
+# OS cruft
+.DS_Store
+Thumbs.db
