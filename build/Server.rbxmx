@@ -5,6 +5,240 @@
     </Properties>
     <Item class="Script" referent="1">
       <Properties>
+        <string name="Name">CreatureDemo</string>
+        <token name="RunContext">0</token>
+        <string name="Source"><![CDATA[--!strict
+--[[
+	Spawns one creature near the cabin and cycles it through every animation,
+	so all four can be seen without any gameplay wired up yet.
+
+	This is a showcase, not the real thing — when the creature gets AI, this
+	script is what gets deleted.
+]]
+
+local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local CreatureAnimation = require(ReplicatedStorage.Shared.CreatureAnimation)
+local CreatureFactory = require(script.Parent.CreatureFactory)
+local World = require(script.Parent.World)
+
+local SPOT = Vector3.new(26, 0, -18)
+local ORDER = { "feed", "walk", "run", "attack" }
+-- Long enough to watch a few cycles of each.
+local HOLD = 5
+
+local ok, err = pcall(function()
+	local folder = Instance.new("Folder")
+	folder.Name = "Creatures"
+	folder.Parent = Workspace
+
+	local ground = World.heightAt(SPOT.X, SPOT.Z)
+	local creature = CreatureFactory.spawn(Vector3.new(SPOT.X, ground + 7, SPOT.Z), folder)
+	CollectionService:AddTag(creature, "Creature")
+
+	-- A sign, so it is obvious which clip is playing.
+	local sign = Instance.new("BillboardGui")
+	sign.Name = "ClipLabel"
+	sign.Size = UDim2.fromOffset(220, 40)
+	sign.StudsOffsetWorldSpace = Vector3.new(0, 9, 0)
+	sign.AlwaysOnTop = true
+	sign.Parent = creature:FindFirstChild("HumanoidRootPart")
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 24
+	label.TextColor3 = Color3.fromRGB(255, 120, 110)
+	label.TextStrokeTransparency = 0.4
+	label.Text = ""
+	label.Parent = sign
+
+	task.spawn(function()
+		local index = 0
+		while creature.Parent do
+			index += 1
+			local clipName = ORDER[(index - 1) % #ORDER + 1]
+			local clip = CreatureAnimation.clips[clipName]
+
+			creature:SetAttribute("State", clipName)
+			label.Text = string.upper(clipName)
+
+			if clip.looping then
+				task.wait(HOLD)
+			else
+				-- Play a one-shot a few times rather than holding its last
+				-- frame, which would just look like a freeze.
+				for _ = 1, 3 do
+					task.wait(clip.length + 0.35)
+					creature:SetAttribute("State", "idle")
+					task.wait(0.2)
+					creature:SetAttribute("State", clipName)
+				end
+			end
+		end
+	end)
+end)
+
+if not ok then
+	warn("[CreatureDemo] failed: " .. tostring(err))
+end
+]]></string>
+      </Properties>
+    </Item>
+    <Item class="ModuleScript" referent="2">
+      <Properties>
+        <string name="Name">CreatureFactory</string>
+        <string name="Source"><![CDATA[--!strict
+--[[
+	Builds a creature from the rig spec.
+
+	Every limb is a Part joined to its parent by a Motor6D. Motor6D is the joint
+	Roblox's own characters use: it holds a C0 and C1 offset, and a Transform
+	that animation writes to. Posing the creature means writing rotations into
+	those Transforms — the parts never move on their own, so a limb cannot drift
+	out of its socket however hard the animation pushes it.
+
+	Only HumanoidRootPart is unanchored and collidable. The limbs are massless
+	and pass through everything, so a fifteen-part creature costs the physics
+	engine about as much as a single block.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CreatureRig = require(ReplicatedStorage.Shared.CreatureRig)
+
+local CreatureFactory = {}
+
+local function newLimb(limb: CreatureRig.Limb): BasePart
+	local part = Instance.new("Part")
+	part.Name = limb.name
+	part.Size = limb.size
+	part.Color = limb.color
+	part.Material = Enum.Material.Slate
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Transparency = limb.transparency or 0
+
+	if limb.shape == "Ball" then
+		part.Shape = Enum.PartType.Ball
+	end
+
+	-- Limbs are along for the ride: no collision, no mass, no self-interference.
+	part.CanCollide = false
+	part.CanQuery = false
+	part.Massless = true
+
+	return part
+end
+
+--[[
+	Assemble one creature at `position`. Returns the model.
+
+	The Humanoid gives us walking, gravity and a death state for free. Its
+	RigType is Custom because this is not an R6 or R15 body and Roblox should
+	not try to apply its own animations to it.
+]]
+function CreatureFactory.spawn(position: Vector3, parent: Instance): Model
+	local model = Instance.new("Model")
+	model.Name = "Creature"
+
+	local root = Instance.new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Size = CreatureRig.rootSize
+	root.Transparency = 1
+	root.CanCollide = true
+	root.CFrame = CFrame.new(position)
+	root.Parent = model
+
+	local built: { [string]: BasePart } = { HumanoidRootPart = root }
+
+	for _, limb in CreatureRig.limbs do
+		local parentPart = built[limb.parent]
+		if not parentPart then
+			warn(
+				string.format(
+					"[CreatureFactory] %s has no parent %s — skipped",
+					limb.name,
+					limb.parent
+				)
+			)
+			continue
+		end
+
+		local part = newLimb(limb)
+		-- Position it roughly before jointing. Motor6D takes over immediately,
+		-- but starting near the right place avoids a visible snap on the first
+		-- frame.
+		part.CFrame = parentPart.CFrame * CFrame.new(limb.jointOnParent)
+		part.Parent = model
+
+		local rest = limb.restAngles or Vector3.zero
+
+		local joint = Instance.new("Motor6D")
+		joint.Name = limb.name
+		joint.Part0 = parentPart
+		joint.Part1 = part
+		-- C0 is where the joint sits on the parent, C1 where it sits on the
+		-- child. The rest rotation goes into C0 so animation can work from
+		-- zero and still land on the intended stance.
+		joint.C0 = CFrame.new(limb.jointOnParent) * CFrame.Angles(rest.X, rest.Y, rest.Z)
+		joint.C1 = CFrame.new(limb.jointOnSelf)
+		joint.Parent = parentPart
+
+		built[limb.name] = part
+	end
+
+	local humanoid = Instance.new("Humanoid")
+	humanoid.RigType = Enum.HumanoidRigType.R15
+	humanoid.WalkSpeed = 0
+	humanoid.AutoRotate = true
+	-- Nothing here should try to climb, sit or use Roblox's own state machine
+	-- animations — the rig is not a Roblox character and would be posed twice.
+	humanoid.Parent = model
+
+	for _, state in
+		{
+			Enum.HumanoidStateType.Climbing,
+			Enum.HumanoidStateType.Seated,
+			Enum.HumanoidStateType.PlatformStanding,
+			Enum.HumanoidStateType.Ragdoll,
+		}
+	do
+		humanoid:SetStateEnabled(state, false)
+	end
+
+	--[[
+		Stand it on the ground.
+
+		A Humanoid holds its root part `HipHeight` above the floor, plus half the
+		root's own height. This rig's feet hang 6.5 studs below the root, so with
+		the default HipHeight of 0 the creature spawns buried to its chest.
+
+		Measured from the assembled rig rather than hardcoded, so changing the
+		leg proportions in CreatureRig cannot silently sink it again.
+	]]
+	local boxCFrame, boxSize = model:GetBoundingBox()
+	local lowestPoint = boxCFrame.Position.Y - boxSize.Y / 2
+	humanoid.HipHeight = (root.Position.Y - lowestPoint) - root.Size.Y / 2
+
+	model.PrimaryPart = root
+	-- The animator reads this to know which clip to play. An attribute rather
+	-- than a Value object because attributes replicate to clients for free.
+	model:SetAttribute("State", "feed")
+	model.Parent = parent
+
+	return model
+end
+
+return CreatureFactory
+]]></string>
+      </Properties>
+    </Item>
+    <Item class="Script" referent="3">
+      <Properties>
         <string name="Name">Main</string>
         <token name="RunContext">0</token>
         <string name="Source"><![CDATA[--!strict
@@ -325,7 +559,7 @@ end)
 ]]></string>
       </Properties>
     </Item>
-    <Item class="ModuleScript" referent="2">
+    <Item class="ModuleScript" referent="4">
       <Properties>
         <string name="Name">PlayerData</string>
         <string name="Source"><![CDATA[--!strict
@@ -649,7 +883,7 @@ return PlayerData
 ]]></string>
       </Properties>
     </Item>
-    <Item class="ModuleScript" referent="3">
+    <Item class="ModuleScript" referent="5">
       <Properties>
         <string name="Name">ShopService</string>
         <string name="Source"><![CDATA[--!strict
@@ -807,7 +1041,7 @@ return ShopService
 ]]></string>
       </Properties>
     </Item>
-    <Item class="ModuleScript" referent="4">
+    <Item class="ModuleScript" referent="6">
       <Properties>
         <string name="Name">World</string>
         <string name="Source"><![CDATA[--!strict
