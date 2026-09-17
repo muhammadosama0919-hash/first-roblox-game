@@ -236,6 +236,63 @@ local function plantTree(position: Vector3, rng: Random, parent: Instance)
 end
 
 --[[
+	Fill the triangle a-b-c with geometry.
+
+	Roblox has no triangle primitive, so the standard approach is two right
+	triangles back to back: drop a perpendicular from the corner opposite the
+	longest edge, and each half is exactly a WedgePart. Reordering so the
+	longest edge is opposite `a` is what guarantees that perpendicular lands
+	inside the triangle rather than outside it.
+
+	Every axis is derived from the points themselves, so unlike rotating a
+	wedge by a guessed angle, there is no orientation convention to get wrong.
+]]
+local function triangle(
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	thickness: number,
+	color: Color3,
+	material: Enum.Material,
+	parent: Instance
+)
+	local ab, ac, bc = b - a, c - a, c - b
+	local abSq, acSq, bcSq = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc)
+
+	-- Rotate the labels until bc is the longest edge.
+	if abSq > acSq and abSq > bcSq then
+		a, c = c, a
+	elseif acSq > abSq and acSq > bcSq then
+		a, b = b, a
+	end
+
+	ab, ac, bc = b - a, c - a, c - b
+
+	local right = ac:Cross(ab).Unit
+	local up = bc:Cross(right).Unit
+	local back = bc.Unit
+
+	local height = math.abs(ab:Dot(up))
+
+	for _, half in { { ab, (a + b) / 2, 1 }, { ac, (a + c) / 2, -1 } } do
+		local edge = half[1] :: Vector3
+		local centre = half[2] :: Vector3
+		local flip = half[3] :: number
+
+		local wedge = Instance.new("WedgePart")
+		wedge.Name = "Gable"
+		wedge.Size = Vector3.new(thickness, height, math.abs(edge:Dot(back)))
+		wedge.CFrame = CFrame.fromMatrix(centre, right * flip, up, back * flip)
+		wedge.Color = color
+		wedge.Material = material
+		wedge.Anchored = true
+		wedge.TopSurface = Enum.SurfaceType.Smooth
+		wedge.BottomSurface = Enum.SurfaceType.Smooth
+		wedge.Parent = parent
+	end
+end
+
+--[[
 	A cabin, built from plain Parts.
 
 	Walls with openings are made from several pieces rather than one part, since
@@ -377,20 +434,20 @@ local function buildHouse(origin: Vector3, parent: Instance)
 	end
 
 	-- Triangular fill at each gable end, so the roof is not open to the sky.
-	-- A WedgePart's vertical face is its +Z side and it slopes away toward -Z,
-	-- so rotating 90 degrees about Y points that face at the ridge.
+	-- Built from its three corner points rather than by rotating a WedgePart
+	-- into place: that needed an assumption about which face of a wedge is the
+	-- vertical one, which could not be checked without rendering it. Corner
+	-- points have no convention to get backwards.
 	for _, zEnd in { halfD, -halfD } do
-		for _, side in { -1, 1 } do
-			local wedge = Instance.new("WedgePart")
-			wedge.Name = "Gable"
-			wedge.Size = Vector3.new(t, rise, halfW)
-			wedge.CFrame = CFrame.new(origin + Vector3.new(side * halfW / 2, H + rise / 2, zEnd))
-				* CFrame.Angles(0, math.rad(-side * 90), 0)
-			wedge.Color = WALL
-			wedge.Material = Enum.Material.Sandstone
-			wedge.Anchored = true
-			wedge.Parent = house
-		end
+		triangle(
+			origin + Vector3.new(-halfW, H, zEnd),
+			origin + Vector3.new(halfW, H, zEnd),
+			origin + Vector3.new(0, H + rise, zEnd),
+			t,
+			WALL,
+			Enum.Material.Sandstone,
+			house
+		)
 	end
 
 	house.Parent = parent

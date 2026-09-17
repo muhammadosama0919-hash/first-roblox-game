@@ -46,6 +46,11 @@ screenshot.
 killed leaderstats, coins, saving and the shop at the same time. Anything that
 can fail is wrapped, resolved late, and degrades with a message.
 
+**Prefer constructions with no convention to get wrong.** This environment
+cannot render, so any geometry resting on "which face of a WedgePart is the
+vertical one" is unverifiable. Deriving axes from points instead makes it
+checkable with arithmetic.
+
 **Check the API dump for `NotScriptable`, not just whether a property exists.**
 `Terrain.Decoration`, `Terrain.GrassLength`, `Terrain.MaterialColors` and
 `Lighting.Technology` are real, saveable properties that **error if assigned
@@ -100,9 +105,18 @@ Working: generated terrain with a pond and shoreline, ~90 trees, a cabin, 22
 coins, leaderstats, a three-item shop with server-validated purchases, sprint on
 Shift, DataStore saving with graceful degradation.
 
-Known unverified: the **roof gable triangles** on the cabin use `WedgePart`
-orientation reasoned about from first principles and never rendered. If they
-point the wrong way, flip the sign on the Y rotation in `buildHouse`.
+Also working: a Motor6D creature rig with four code-driven animations (walk,
+run, feed, attack). Animated by writing joint rotations rather than playing
+animation assets, because every `AnimationClipProvider` method takes an asset
+id — an authored animation cannot play without being uploaded to Roblox first,
+and `Motor6D.Transform` needs no upload. `CreatureDemo` is a showcase to delete
+once the creature gets behaviour.
+
+The gable triangles are no longer a guess: they are built from their three
+corner points via `triangle()` in `World.luau`, which derives every axis from
+the geometry, so there is no wedge orientation convention left to get wrong.
+Verified numerically — the two wedges cover exactly the triangle's area for
+acute, right and obtuse cases.
 
 Saving is off until the place is published — `GetDataStore` throws outright in
 an unpublished place. The code detects this at startup and says so once. The
