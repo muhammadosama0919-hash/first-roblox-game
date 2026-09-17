@@ -16,6 +16,20 @@ loop has been:
 artifact to be gitignored. `.gitignore` has an explicit exception explaining
 this. If the developer starts running Rojo locally, stop committing it.
 
+**Once the developer has done any work inside Studio, stop sending `.rbxl`.**
+It replaces the place wholesale, so an imported mesh, a hand-built rig or any
+placed geometry is destroyed with no warning and no merge. Send the `.rbxmx`
+models instead; they carry only code and insert into an existing place. This
+matters now that meshes are being imported by hand.
+
+Two related traps, both verified against the API reference:
+- `MeshPart.MeshId` is **read-only from scripts**, so a mesh cannot be swapped
+  onto a part in Luau. Meshes must be imported, or created through
+  `AssetService:CreateMeshPartAsync` + `MeshPart:ApplyMesh`.
+- The creature rig is assembled at runtime by `CreatureFactory.spawn`, so there
+  is **no rig in the Explorer** to edit in Studio. Instructions that assume a
+  clickable rig are wrong for this project.
+
 **Their cost curve is inverted from a normal solo dev.** Code is cheap; Studio
 work — placing geometry, modelling, animation — is expensive, because they do
 all of it by hand. Prefer designs where code generates content. Do not propose

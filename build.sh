@@ -9,9 +9,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROJO="${ROJO:-rojo}"
 
-# A complete place: baseplate, spawn, lighting and all the code. Open it
-# directly in Studio. Only use this for a fresh start — it REPLACES a place,
-# so it would discard any world you have built.
+# A complete place: baseplate, spawn, lighting and all the code.
+#
+# ############################ WARNING ############################
+# This file REPLACES a place wholesale. Once you have done ANY work
+# inside Studio — imported a mesh, built geometry, rigged something,
+# placed a model — opening a newer .rbxl DESTROYS it. There is no
+# merge and no warning from Studio.
+#
+# From that point on, take the .rbxmx models in build/ instead. They
+# carry only code, and insert into a place you already have.
+# #################################################################
 "$ROJO" build place.project.json -o build/first-roblox-game.rbxl
 
 # Individual folders, for updating the code inside a place you already have.
