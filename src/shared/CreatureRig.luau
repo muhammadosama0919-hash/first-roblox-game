@@ -47,12 +47,24 @@ CreatureRig.rootSize = Vector3.new(3.4, 2.6, 2.2)
 	that already exists without sorting.
 ]]
 local LIMBS: { Limb } = {
+	-- Pelvis. Bridges the invisible root to the legs. Without it the chest was
+	-- the only torso piece, so pitching the chest tore the upper body away from
+	-- the hips and left a visible gap.
+	{
+		name = "Pelvis",
+		parent = "HumanoidRootPart",
+		size = Vector3.new(3.0, 3.4, 2.5),
+		jointOnParent = Vector3.new(0, 0.3, 0),
+		jointOnSelf = Vector3.new(0, 0.5, 0),
+		color = HIDE_DARK,
+	},
+
 	-- Spine. The chest sits forward of the hips, which is what produces the
 	-- hunch without needing an animation to hold it there.
 	{
 		name = "Chest",
 		parent = "HumanoidRootPart",
-		size = Vector3.new(3.8, 2.8, 2.6),
+		size = Vector3.new(3.1, 3.0, 2.4),
 		jointOnParent = Vector3.new(0, 1.3, 0),
 		jointOnSelf = Vector3.new(0, -1.4, 0),
 		restAngles = Vector3.new(-0.42, 0, 0),
@@ -61,18 +73,19 @@ local LIMBS: { Limb } = {
 	{
 		name = "Neck",
 		parent = "Chest",
-		size = Vector3.new(1.5, 1.6, 1.5),
-		jointOnParent = Vector3.new(0, 1.4, -0.7),
-		jointOnSelf = Vector3.new(0, -0.8, 0),
-		restAngles = Vector3.new(0.55, 0, 0),
+		size = Vector3.new(1.4, 2.6, 1.4),
+		jointOnParent = Vector3.new(0, 1.4, -0.6),
+		jointOnSelf = Vector3.new(0, -1.3, 0),
+		restAngles = Vector3.new(1.05, 0, 0),
 		color = HIDE_DARK,
 	},
 	{
 		name = "Head",
 		parent = "Neck",
-		size = Vector3.new(2.0, 1.7, 2.9),
-		jointOnParent = Vector3.new(0, 0.8, 0),
-		jointOnSelf = Vector3.new(0, -0.6, 0.5),
+		size = Vector3.new(1.9, 1.6, 3.2),
+		jointOnParent = Vector3.new(0, 1.3, 0),
+		jointOnSelf = Vector3.new(0, -0.3, 1.1),
+		restAngles = Vector3.new(-0.75, 0, 0),
 		color = HIDE,
 	},
 	{
@@ -144,18 +157,18 @@ local LIMBS: { Limb } = {
 	{
 		name = "ThighL",
 		parent = "HumanoidRootPart",
-		size = Vector3.new(1.4, 2.8, 1.4),
-		jointOnParent = Vector3.new(-1.1, -1.2, 0),
-		jointOnSelf = Vector3.new(0, 1.2, 0),
+		size = Vector3.new(1.35, 3.6, 1.35),
+		jointOnParent = Vector3.new(-1.05, -1.4, 0),
+		jointOnSelf = Vector3.new(0, 1.6, 0),
 		restAngles = Vector3.new(0.5, 0, 0),
 		color = HIDE,
 	},
 	{
 		name = "ShinL",
 		parent = "ThighL",
-		size = Vector3.new(1.15, 3.0, 1.15),
-		jointOnParent = Vector3.new(0, -1.3, 0),
-		jointOnSelf = Vector3.new(0, 1.4, 0),
+		size = Vector3.new(1.1, 3.8, 1.1),
+		jointOnParent = Vector3.new(0, -1.7, 0),
+		jointOnSelf = Vector3.new(0, 1.8, 0),
 		restAngles = Vector3.new(-1.0, 0, 0),
 		color = HIDE_DARK,
 	},
@@ -163,7 +176,7 @@ local LIMBS: { Limb } = {
 		name = "FootL",
 		parent = "ShinL",
 		size = Vector3.new(1.2, 0.7, 2.4),
-		jointOnParent = Vector3.new(0, -1.4, 0),
+		jointOnParent = Vector3.new(0, -1.8, 0),
 		jointOnSelf = Vector3.new(0, 0.3, -0.6),
 		restAngles = Vector3.new(0.5, 0, 0),
 		color = HIDE_DARK,
@@ -171,18 +184,18 @@ local LIMBS: { Limb } = {
 	{
 		name = "ThighR",
 		parent = "HumanoidRootPart",
-		size = Vector3.new(1.4, 2.8, 1.4),
-		jointOnParent = Vector3.new(1.1, -1.2, 0),
-		jointOnSelf = Vector3.new(0, 1.2, 0),
+		size = Vector3.new(1.35, 3.6, 1.35),
+		jointOnParent = Vector3.new(1.05, -1.4, 0),
+		jointOnSelf = Vector3.new(0, 1.6, 0),
 		restAngles = Vector3.new(0.5, 0, 0),
 		color = HIDE,
 	},
 	{
 		name = "ShinR",
 		parent = "ThighR",
-		size = Vector3.new(1.15, 3.0, 1.15),
-		jointOnParent = Vector3.new(0, -1.3, 0),
-		jointOnSelf = Vector3.new(0, 1.4, 0),
+		size = Vector3.new(1.1, 3.8, 1.1),
+		jointOnParent = Vector3.new(0, -1.7, 0),
+		jointOnSelf = Vector3.new(0, 1.8, 0),
 		restAngles = Vector3.new(-1.0, 0, 0),
 		color = HIDE_DARK,
 	},
@@ -190,7 +203,7 @@ local LIMBS: { Limb } = {
 		name = "FootR",
 		parent = "ShinR",
 		size = Vector3.new(1.2, 0.7, 2.4),
-		jointOnParent = Vector3.new(0, -1.4, 0),
+		jointOnParent = Vector3.new(0, -1.8, 0),
 		jointOnSelf = Vector3.new(0, 0.3, -0.6),
 		restAngles = Vector3.new(0.5, 0, 0),
 		color = HIDE_DARK,

@@ -110,8 +110,8 @@ local run: Clip = {
 		-- Arms drive rather than swing, and reach further forward than the legs.
 		local left = math.sin(phase * TAU)
 		local right = math.sin(phase * TAU + math.pi)
-		p.ArmUpperL = Vector3.new(right * 1.25 - 0.35, 0, 0.1)
-		p.ArmUpperR = Vector3.new(left * 1.25 - 0.35, 0, -0.1)
+		p.ArmUpperL = Vector3.new(right * 0.7 + 0.5, 0, 0.1)
+		p.ArmUpperR = Vector3.new(left * 0.7 + 0.5, 0, -0.1)
 		p.ArmLowerL = Vector3.new(-0.55 - math.abs(right) * 0.35, 0, 0)
 		p.ArmLowerR = Vector3.new(-0.55 - math.abs(left) * 0.35, 0, 0)
 
@@ -182,7 +182,7 @@ local attack: Clip = {
 		local recover = math.clamp((t - 0.55) / 0.45, 0, 1)
 
 		-- Rear back, then whip forward, then settle.
-		local reach = -coil * 0.9 + snap(strike) * 2.3 - recover * 1.15
+		local reach = -coil * 0.45 + snap(strike) * 2.1 - recover * 1.25
 		local body = -coil * 0.45 + snap(strike) * 0.95 - recover * 0.5
 
 		return {
