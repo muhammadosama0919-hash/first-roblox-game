@@ -1,0 +1,61 @@
+# Builds machine-bridge.exe on a real Windows runner.
+#
+# This exists because a Windows .exe cannot be cross-compiled from Linux --
+# PyInstaller freezes the interpreter it is running under, so a Windows binary
+# needs a Windows machine. GitHub's windows-latest runner is that machine, and
+# it is free for public repositories.
+#
+# Run it from the Actions tab, then download the artifact.
+
+name: build machine-bridge.exe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller==6.11.1
+
+      - name: Build
+        run: >
+          pyinstaller
+          --onefile
+          --console
+          --name machine-bridge
+          --hidden-import machine_mcp
+          --paths tools/bridge
+          tools/bridge/bridge_app.py
+
+      - name: Smoke test the binary
+        shell: pwsh
+        run: |
+          # A build that produces an exe which cannot start is a failed build.
+          # No config exists on the runner, so it reaches the first-run prompt;
+          # that it gets that far proves the freeze bundled both modules.
+          $p = Start-Process -FilePath dist\machine-bridge.exe -PassThru -RedirectStandardOutput out.txt -RedirectStandardError err.txt
+          Start-Sleep -Seconds 12
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          Get-Content out.txt
+          if (-not (Select-String -Path out.txt -Pattern 'machine-bridge' -Quiet)) {
+            Write-Error 'exe did not produce its banner'
+            exit 1
+          }
+          Write-Host 'binary starts and prints its banner'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: machine-bridge-exe
+          path: dist/machine-bridge.exe
+          retention-days: 30
