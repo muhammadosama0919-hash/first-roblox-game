@@ -134,7 +134,44 @@ def tunnel_command(domain: str) -> list[str] | None:
     return None
 
 
+def unbuffer() -> None:
+    """Flush every line immediately.
+
+    Python block-buffers stdout whenever it is not a terminal. Redirect this
+    program to a file or pipe it, and the banner sits in a buffer until the
+    process exits -- but it deliberately does not exit, it waits on the tunnel.
+    The result is an empty log and the appearance of a program that never
+    started. (This is exactly how the first CI build failed.)
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
+
+
+def selftest() -> int:
+    """Prove a downloaded binary actually runs, without touching any config.
+
+    Deliberately opens no dialog, writes no file and binds no port, so it is
+    safe to run on a build machine and safe for you to run on a fresh download
+    before trusting it.
+    """
+    print(f"  {APP_NAME} self-test")
+    print(f"  python   {sys.version.split()[0]}")
+    print(f"  frozen   {getattr(sys, 'frozen', False)}")
+    print(f"  tools    {', '.join(sorted(machine_mcp.HANDLERS))}")
+    print(f"  access   READ ONLY — no write, delete or execute tool exists")
+    print("  OK")
+    return 0
+
+
 def main() -> int:
+    unbuffer()
+
+    if "--selftest" in sys.argv:
+        return selftest()
+
     print()
     print("  " + "=" * 64)
     print(f"  {APP_NAME}  —  read-only bridge from this PC to a Claude session")

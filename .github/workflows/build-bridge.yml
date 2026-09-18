@@ -42,17 +42,23 @@ jobs:
         shell: pwsh
         run: |
           # A build that produces an exe which cannot start is a failed build.
-          # No config exists on the runner, so it reaches the first-run prompt;
-          # that it gets that far proves the freeze bundled both modules.
-          $p = Start-Process -FilePath dist\machine-bridge.exe -PassThru -RedirectStandardOutput out.txt -RedirectStandardError err.txt
-          Start-Sleep -Seconds 12
-          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-          Get-Content out.txt
-          if (-not (Select-String -Path out.txt -Pattern 'machine-bridge' -Quiet)) {
-            Write-Error 'exe did not produce its banner'
+          # --selftest takes the non-interactive path: no folder dialog, no
+          # config written, no port bound, and it exits on its own. The first
+          # attempt started the exe normally, which blocked on the first-run
+          # dialog and -- because Python block-buffers a redirected stdout --
+          # produced an empty log that looked like a binary that never ran.
+          dist\machine-bridge.exe --selftest | Tee-Object -FilePath out.txt
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "selftest exited $LASTEXITCODE"
             exit 1
           }
-          Write-Host 'binary starts and prints its banner'
+          foreach ($needle in 'machine-bridge self-test', 'search_files', 'READ ONLY', 'OK') {
+            if (-not (Select-String -Path out.txt -Pattern $needle -SimpleMatch -Quiet)) {
+              Write-Error "selftest output missing: $needle"
+              exit 1
+            }
+          }
+          Write-Host 'binary runs and reports the expected toolset'
 
       - uses: actions/upload-artifact@v4
         with:
