@@ -321,6 +321,21 @@ def main() -> int:
         print(f"    {token}")
     print()
 
+    flagged = machine_mcp.audit()
+    if flagged:
+        print("  " + "!" * 64)
+        print(f"  {len(flagged)} readable file(s) here look sensitive. They are NOT hidden:")
+        for row in flagged[:12]:
+            print(f"    {row}")
+        if len(flagged) > 12:
+            print(f"    ... and {len(flagged) - 12} more")
+        print()
+        print("  The deny-list matches filename patterns; it cannot catch every")
+        print("  spelling. If any of these hold real credentials, close this and")
+        print("  point --root somewhere that does not.")
+        print("  " + "!" * 64)
+        print()
+
     ok, detail = self_check(token)
     print(f"  self-check  {'PASS' if ok else 'FAIL'}  {detail}")
     if not ok:

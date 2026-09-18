@@ -80,9 +80,12 @@ DENY_GLOBS = [
     "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore", "*.jks", "*.ppk",
     "id_rsa*", "id_dsa*", "id_ecdsa*", "id_ed25519*", "*.asc", "*.gpg",
     # config files that routinely hold live credentials
-    ".env", ".env.*", "*.env", ".netrc", "_netrc", ".git-credentials",
+    # "*.env*", not "*.env": a real bundle held az-phone-agent.env (caught) beside
+    # az-phone-agent.env.local (missed), because that matches neither ".env.*"
+    # (wrong prefix) nor "*.env" (wrong suffix). Live API keys were readable.
+    "*.env*", "*.envrc", ".netrc", "_netrc", ".git-credentials",
     ".npmrc", ".pypirc", ".dockercfg", ".docker-config.json",
-    "credentials", "credentials.json", "client_secret*.json",
+    "*credential*", "client_secret*.json", "*api?key*", "*apikey*", "*.ovpn", "*.p8",
     ".htpasswd", "shadow", "sam", "security",
     # anything self-describing
     "*secret*", "*token*", "*password*", "*passwd*", "*.kdbx", "*wallet*",
@@ -97,6 +100,10 @@ DENY_GLOBS = [
 DENY_DIRS = {
     ".ssh", ".gnupg", ".aws", ".azure", "gcloud", ".kube", ".docker",
     ".password-store", ".mozilla", ".thunderbird", "keychains",
+    # Directories whose entire purpose is credentials. A name blocklist cannot
+    # win against arbitrary file naming; excluding the folder can.
+    "env", "envs", ".env", "secret", "secrets", ".secrets", "vault", ".vault",
+    "private", ".credentials",
     "google/chrome", "bravesoftware", "microsoft/edge", "firefox",
     ".local/share/keyrings", "protected storage", "credentials",
     # OS internals: huge, useless to share, and full of system secrets
@@ -104,12 +111,47 @@ DENY_DIRS = {
     "proc", "sys", "dev", "private/var/db",
 }
 
+# Names that suggest a secret even when no deny pattern matched. Used only to
+# WARN -- the point is to say "this is visible and looks sensitive", never to
+# imply the blocklist is sufficient.
+SUSPICIOUS = ("env", "secret", "token", "key", "cred", "password", "passwd", "auth", "private")
+
 ROOT: pathlib.Path
 TOKEN: str
 ALLOW_SECRETS = False
 
 
 # --------------------------------------------------------------------------- paths
+
+def audit(limit: int = 4000) -> list[str]:
+    """Files that ARE readable and look like they should not be.
+
+    The deny-list is a blocklist, and a blocklist silently returns "nothing to
+    report" both when a folder is clean and when it is full of secrets it did
+    not recognise. That difference matters far too much to leave unstated, so
+    the folder is scanned once and anything questionable is named out loud.
+    """
+    flagged, seen = [], 0
+    try:
+        for path in ROOT.rglob("*"):
+            seen += 1
+            if seen > limit:
+                break
+            if not path.is_file() or denied(path):
+                continue
+            name = path.name.lower()
+            if any(word in name for word in SUSPICIOUS):
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                flagged.append(f"{path.relative_to(ROOT).as_posix()}  ({size:,} bytes)")
+            if len(flagged) >= 40:
+                break
+    except (OSError, ValueError):
+        pass
+    return flagged
+
 
 def resolve(relative: str) -> pathlib.Path:
     """Resolve a client-supplied path inside ROOT, or raise."""
