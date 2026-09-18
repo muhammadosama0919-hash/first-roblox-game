@@ -4,6 +4,7 @@ title machine-bridge
 
 rem ============ EDIT THESE TWO LINES ONCE, THEN NEVER AGAIN ============
 set "ROOT=C:\Users\Admin\Desktop\first-roblox-game"
+set "TUNNEL=cloudflared"
 set "NGROK_DOMAIN="
 rem   ^ leave empty to use a random cloudflare URL (you must re-paste it
 rem     every restart). Put your free ngrok static domain here instead --
@@ -57,7 +58,7 @@ echo.
 
 start "machine-bridge server" /min %PY% "%HERE%machine_mcp.py" --root "%ROOT%" --token %TOKEN% --port %PORT%
 
-if defined NGROK_DOMAIN (
+if /I "%TUNNEL%"=="ngrok" (
   echo   Registration line ^(paste to Claude ONCE, it never changes^):
   echo.
   echo   claude mcp add --transport http my-machine https://%NGROK_DOMAIN%/ --header "Authorization: Bearer %TOKEN%"
@@ -66,7 +67,7 @@ if defined NGROK_DOMAIN (
   echo.
   ngrok http --url=https://%NGROK_DOMAIN% %PORT%
 ) else (
-  echo   No fixed domain set -- using a random cloudflare URL.
+  echo   Using cloudflared. Set TUNNEL=ngrok at the top to switch.
   echo   Copy the https://...trycloudflare.com line below and send it to Claude,
   echo   along with the token above. You will have to redo this every restart.
   echo.

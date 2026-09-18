@@ -52,6 +52,23 @@ server together.
 
 Without step 2 it still works, but you re-paste a new URL on every restart.
 
+## Choosing the tunnel
+
+The tunnel is a setting, not a guess. First run asks; after that it lives in
+`machine-bridge.json` next to the exe as `"tunnel": "cloudflared"` or
+`"ngrok"`, and `--tunnel cloudflared` / `--tunnel ngrok` overrides it for one
+run without editing anything.
+
+Earlier versions probed PATH and took ngrok whenever they found it, which
+silently overrode the choice — if you had ngrok installed for something else
+you got ngrok, and had to move the binary aside to use anything else.
+
+**cloudflared** needs no account and nothing metered, but hands you a new URL
+every start. **ngrok** free is metered (1 GB and 20,000 requests a month) and a
+static domain keeps the URL fixed. For reading source files the metering is not
+close to binding — the whole project is under a megabyte — but cloudflared is
+the default because it needs no signup.
+
 ## What it exposes
 
 | Tool | Does |

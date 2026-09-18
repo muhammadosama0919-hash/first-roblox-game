@@ -4,6 +4,7 @@ set -euo pipefail
 
 # ============ EDIT THESE TWO LINES ONCE ============
 ROOT="${ROOT:-/c/Users/Admin/Desktop/first-roblox-game}"
+TUNNEL="${TUNNEL:-cloudflared}"
 NGROK_DOMAIN="${NGROK_DOMAIN:-}"
 # ==================================================
 
@@ -36,7 +37,7 @@ SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT INT TERM
 sleep 1
 
-if [ -n "$NGROK_DOMAIN" ]; then
+if [ "$TUNNEL" = "ngrok" ]; then
   cat <<MSG
   Registration line (paste to Claude ONCE, it never changes):
 
@@ -47,7 +48,7 @@ if [ -n "$NGROK_DOMAIN" ]; then
 MSG
   ngrok http --url="https://$NGROK_DOMAIN" "$PORT"
 else
-  echo "  No fixed domain set — using a random cloudflare URL."
+  echo "  Using cloudflared. Set TUNNEL=ngrok to switch."
   echo "  Send Claude the https://...trycloudflare.com line below AND the token."
   echo "  You will have to redo this every restart."
   echo

@@ -103,11 +103,19 @@ def first_run(config: dict) -> dict:
         print("     Not a folder. Try again.\n")
     print(f"     -> {config['root']}\n")
 
-    print("  2. ngrok static domain, if you have one (Enter to skip).")
-    print("     With one, the URL never changes and you register with Claude ONCE.")
-    print("     Without one, you paste a fresh cloudflare URL on every restart.")
-    domain = input("     domain: ").strip().replace("https://", "").rstrip("/")
-    config["ngrok_domain"] = domain
+    print("  2. Which tunnel should put this on a public URL?")
+    print("       1) cloudflared  — no account, no limits to think about,")
+    print("                         but a NEW URL every time you start it")
+    print("       2) ngrok        — free account; a static domain keeps the")
+    print("                         URL fixed, but the free tier is metered")
+    choice = input("     1 or 2 [1]: ").strip() or "1"
+    config["tunnel"] = "ngrok" if choice == "2" else "cloudflared"
+    print(f"     -> {config['tunnel']}")
+
+    config["ngrok_domain"] = ""
+    if config["tunnel"] == "ngrok":
+        domain = input("     ngrok static domain, if you have one (Enter to skip): ")
+        config["ngrok_domain"] = domain.strip().replace("https://", "").rstrip("/")
     print()
 
     config["token"] = secrets.token_hex(24)
@@ -124,14 +132,50 @@ def start_server(root: str, token: str) -> ThreadingHTTPServer:
     return server
 
 
-def tunnel_command(domain: str) -> list[str] | None:
-    if domain and shutil.which("ngrok"):
-        return ["ngrok", "http", f"--url=https://{domain}", str(PORT)]
-    if shutil.which("ngrok"):
-        return ["ngrok", "http", str(PORT)]
-    if shutil.which("cloudflared"):
-        return ["cloudflared", "tunnel", "--url", f"http://localhost:{PORT}"]
-    return None
+def tunnel_command(config: dict) -> tuple[list[str] | None, str]:
+    """Pick the tunnel the config asks for, not whichever happens to be installed.
+
+    This used to probe PATH and take ngrok whenever it found it, which silently
+    overrode the choice: someone who had ngrok installed for something else got
+    ngrok whether they wanted it or not, and had to move the binary aside to
+    use anything else. The config decides; PATH only says whether it is there.
+    """
+    port = str(PORT)
+    wanted = (config.get("tunnel") or "auto").lower()
+    domain = config.get("ngrok_domain", "")
+
+    def ngrok():
+        if not shutil.which("ngrok"):
+            return None
+        if domain:
+            return ["ngrok", "http", f"--url=https://{domain}", port]
+        return ["ngrok", "http", port]
+
+    def cloudflared():
+        if not shutil.which("cloudflared"):
+            return None
+        return ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"]
+
+    if wanted == "ngrok":
+        return ngrok(), "ngrok"
+    if wanted == "cloudflared":
+        return cloudflared(), "cloudflared"
+
+    # auto: prefer the one that needs no account.
+    chosen = cloudflared()
+    if chosen:
+        return chosen, "cloudflared"
+    return ngrok(), "ngrok"
+
+
+INSTALL_HINT = {
+    "cloudflared": (
+        "  Download one file, rename it to cloudflared.exe, and put it in THIS folder:\n"
+        "    https://github.com/cloudflare/cloudflared/releases/latest/download/"
+        "cloudflared-windows-amd64.exe"
+    ),
+    "ngrok": "  Install from https://ngrok.com/download",
+}
 
 
 def unbuffer() -> None:
@@ -161,6 +205,7 @@ def selftest() -> int:
     print(f"  python   {sys.version.split()[0]}")
     print(f"  frozen   {getattr(sys, 'frozen', False)}")
     print(f"  tools    {', '.join(sorted(machine_mcp.HANDLERS))}")
+    print(f"  tunnels  cloudflared={bool(shutil.which('cloudflared'))} ngrok={bool(shutil.which('ngrok'))}")
     print(f"  access   READ ONLY — no write, delete or execute tool exists")
     print("  OK")
     return 0
@@ -171,6 +216,17 @@ def main() -> int:
 
     if "--selftest" in sys.argv:
         return selftest()
+
+    override = ""
+    if "--tunnel" in sys.argv:
+        try:
+            override = sys.argv[sys.argv.index("--tunnel") + 1].lower()
+        except IndexError:
+            print("  --tunnel needs a value: cloudflared, ngrok or auto")
+            return 2
+        if override not in ("cloudflared", "ngrok", "auto"):
+            print(f"  unknown tunnel: {override}")
+            return 2
 
     print()
     print("  " + "=" * 64)
@@ -190,11 +246,14 @@ def main() -> int:
         config = first_run(config)
         save(path, config)
 
+    if override:
+        config["tunnel"] = override
     root, token, domain = config["root"], config["token"], config.get("ngrok_domain", "")
 
     print(f"  sharing  {root}")
     print(f"  config   {path}")
     print(f"  access   READ ONLY — no write, delete or execute tool exists")
+    print(f"  tunnel   {config.get('tunnel', 'auto')}")
     print()
 
     try:
@@ -215,12 +274,13 @@ def main() -> int:
         print(f"    {token}")
     print()
 
-    command = tunnel_command(domain)
+    command, picked = tunnel_command(config)
     if command is None:
-        print("  No tunnel program found on PATH.")
-        print("  Install ONE of these, then open this again:")
-        print("    ngrok       https://ngrok.com/download   (free static domain)")
-        print("    cloudflared https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
+        print(f"  Tunnel '{picked}' is selected but not installed.")
+        print(INSTALL_HINT.get(picked, ""))
+        print()
+        print("  Then open this again. (Or run with --tunnel ngrok / --tunnel cloudflared")
+        print(f"  to use the other one.) Config: {path}")
         print()
         print(f"  The server is running locally on http://127.0.0.1:{PORT} in the meantime.")
         input("  Enter to stop.")
