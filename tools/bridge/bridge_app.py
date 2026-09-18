@@ -20,6 +20,9 @@ import shutil
 import subprocess
 import sys
 import threading
+import traceback
+import urllib.error
+import urllib.request
 import time
 from http.server import ThreadingHTTPServer
 
@@ -122,12 +125,53 @@ def first_run(config: dict) -> dict:
     return config
 
 
+class BridgeServer(ThreadingHTTPServer):
+    """A server that complains instead of failing quietly.
+
+    allow_reuse_address is OFF deliberately. On Windows, unlike Linux, it lets
+    a SECOND process bind a port a first one already holds -- so a stale copy
+    keeps answering while a new one reports a clean start, and the new settings
+    appear to do nothing. Refusing to start is far easier to understand.
+    """
+
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # The default prints to stderr and carries on, which next to
+        # cloudflared's output is invisible. A handler that crashes closes the
+        # connection with no reply, which looks exactly like the server being
+        # down -- so say so, loudly, on stdout.
+        print("\n  !! a request crashed the handler:")
+        traceback.print_exc()
+        print()
+
+
+def self_check(token: str) -> tuple[bool, str]:
+    """Ask our own server for a reply before handing the port to a tunnel.
+
+    If this fails, no tunnel can help, and the fault is ours rather than the
+    tunnel's -- which is exactly the distinction that cannot be made from the
+    far side of a 502.
+    """
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/", headers={"Authorization": f"Bearer {token}"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            return True, f"HTTP {response.status} {response.read(160).decode('utf-8', 'replace')}"
+    except urllib.error.HTTPError as exc:
+        return True, f"HTTP {exc.code} (the server answered, which is what matters)"
+    except Exception as exc:                            # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 def start_server(root: str, token: str) -> ThreadingHTTPServer:
     machine_mcp.ROOT = pathlib.Path(root).expanduser().resolve()
     machine_mcp.TOKEN = token
     machine_mcp.ALLOW_SECRETS = False
 
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), machine_mcp.Handler)
+    server = BridgeServer(("127.0.0.1", PORT), machine_mcp.Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -275,6 +319,18 @@ def main() -> int:
         print("  No static domain set, so the URL below is new every restart.")
         print("  Send Claude the https://...trycloudflare.com line AND this token:\n")
         print(f"    {token}")
+    print()
+
+    ok, detail = self_check(token)
+    print(f"  self-check  {'PASS' if ok else 'FAIL'}  {detail}")
+    if not ok:
+        print()
+        print("  The server will not answer its own requests, so no tunnel can help.")
+        print("  Anything above starting with '!!' is the reason. If there is nothing,")
+        print("  another copy may hold the port: check Task Manager for stray")
+        print("  machine-bridge.exe processes and end them.")
+        input("\n  Enter to close.")
+        return 1
     print()
 
     command, picked = tunnel_command(config)
