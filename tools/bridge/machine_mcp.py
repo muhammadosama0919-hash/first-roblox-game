@@ -604,12 +604,16 @@ class Handler(BaseHTTPRequestHandler):
             pending = int(self.headers.get("Content-Length", 0))
         except ValueError:
             pending = 0
-        if 0 < pending <= MAX_REQUEST_BYTES:
+        if 0 <= pending <= MAX_REQUEST_BYTES:
             try:
-                self.rfile.read(pending)
+                if pending:
+                    self.rfile.read(pending)
             except OSError:
-                pass
-        self.close_connection = True
+                self.close_connection = True
+        else:
+            # Body length is absent, malformed or absurd, so the stream cannot
+            # be resynchronised. Closing is the only safe option here.
+            self.close_connection = True
         self._send(status, payload)
 
     def _send(self, status: int, payload: dict | None):
@@ -617,6 +621,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        # Announce a close rather than just doing one. Under HTTP/1.1 the
+        # absence of this header means keep-alive, so hanging up silently
+        # leaves the client holding a socket it believes is good: it sends the
+        # next request into a dead connection and reads EOF. cloudflared pools
+        # connections, so one 401 poisoned every request that followed it.
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.end_headers()
         if body:
             self.wfile.write(body)

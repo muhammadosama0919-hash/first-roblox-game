@@ -149,12 +149,15 @@ def tunnel_command(config: dict) -> tuple[list[str] | None, str]:
             return None
         if domain:
             return ["ngrok", "http", f"--url=https://{domain}", port]
-        return ["ngrok", "http", port]
+        return ["ngrok", "http", f"127.0.0.1:{port}"]
 
     def cloudflared():
         if not shutil.which("cloudflared"):
             return None
-        return ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"]
+        # 127.0.0.1, not "localhost": on Windows localhost resolves to ::1
+        # first, and the server binds IPv4 only, so the tunnel would dial an
+        # address nothing is listening on.
+        return ["cloudflared", "tunnel", "--url", f"http://127.0.0.1:{port}"]
 
     if wanted == "ngrok":
         return ngrok(), "ngrok"

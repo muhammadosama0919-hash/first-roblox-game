@@ -52,5 +52,5 @@ else
   echo "  Send Claude the https://...trycloudflare.com line below AND the token."
   echo "  You will have to redo this every restart."
   echo
-  cloudflared tunnel --url "http://localhost:$PORT"
+  cloudflared tunnel --url "http://127.0.0.1:$PORT"
 fi

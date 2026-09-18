@@ -71,7 +71,7 @@ if /I "%TUNNEL%"=="ngrok" (
   echo   Copy the https://...trycloudflare.com line below and send it to Claude,
   echo   along with the token above. You will have to redo this every restart.
   echo.
-  cloudflared tunnel --url http://localhost:%PORT%
+  cloudflared tunnel --url http://127.0.0.1:%PORT%
 )
 
 echo.
