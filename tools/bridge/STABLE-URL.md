@@ -68,10 +68,19 @@ sc.exe stop Tailscale
 sc.exe start Tailscale
 ```
 
-**8. Make it start itself.** Press `Windows+R`, type `shell:startup`, Enter.
-Drop a shortcut to `machine-bridge.exe` in the folder that opens. Tailscale
-already autostarts and the funnel already auto-resumes, so from here the whole
-chain comes up when you turn the PC on.
+**8. Do NOT make the server start itself.**
+
+You could drop `machine-bridge.exe` into `shell:startup` so it comes up with
+Windows. **Don't**, unless you have decided you want that. Opening the exe by
+hand is a real security control: the folder is reachable only while you are
+deliberately using it, and closing the window ends the exposure. Autostart
+quietly converts that into a service that is live whenever the PC is on.
+
+Leaving the Funnel itself running with `--bg` is fine and does not expose
+anything on its own. With nothing listening on `127.0.0.1:8787`, Tailscale has
+no origin to forward to and simply returns an error. **The exe is the switch.**
+That is the combination worth having: a URL that never changes, and an exposure
+that exists only while you are working.
 
 ## Then, per repo: auto-connect with no pasting
 
@@ -115,8 +124,13 @@ Project-scoped servers load without an approval prompt in cloud sessions.
 
 ## Things that will bite you
 
-- **The PC must be awake and online.** If it is asleep the session starts
-  normally and the tools are simply *absent* — no error, nothing to see.
+- **The bridge must be running.** If the exe is closed, or the PC is asleep, a
+  session starts normally and the tools are simply *absent* — no error, nothing
+  to see. That is the intended behaviour, not a fault.
+- **Closing the window ends the exposure, but not the token.** The secret is
+  kept in `machine-bridge.json` so the registration stays valid next time.
+  Anyone who captured it while you were working could use it the next time you
+  open the bridge. Delete that file to force a new one.
 - **A changed URL or token means a NEW session.** Configuration is read once at
   startup; there is no way to push a new address into a running session.
 - **Your `.ts.net` hostname is not a secret.** Issuing an HTTPS certificate
