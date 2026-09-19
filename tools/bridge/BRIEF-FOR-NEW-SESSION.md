@@ -34,8 +34,8 @@ bridge speaks MCP over JSON-RPC 2.0. Set up a helper once:
 
 ```bash
 cat > /tmp/bridge.sh <<'EOF'
-URL="https://PASTE-THE-URL-HERE"
-TOK="PASTE-THE-TOKEN-HERE"
+URL="<BRIDGE_URL from the block at the top of this document>"
+TOK="<BRIDGE_TOKEN from the block at the top of this document>"
 call() {
   name="$1"; args="${2:-{\}}"
   curl -sS --max-time 45 \
@@ -47,7 +47,9 @@ EOF
 . /tmp/bridge.sh
 ```
 
-Then every call is `call <tool> '<json args>'`.
+Substitute the two values yourself from the block at the top — the developer
+fills those in once, and nowhere else. Then every call is
+`call <tool> '<json args>'`.
 
 ## 2. Verify before trusting it
 
