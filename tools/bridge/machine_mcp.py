@@ -55,11 +55,17 @@ PROTOCOL_VERSION = "2025-06-18"
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_ENTRIES = 500
 MAX_MATCHES = 200
-# Nothing legitimate posts a large body at this server; the largest real request
-# is a few hundred bytes of JSON-RPC.
+# Read-only, the largest real request is a few hundred bytes of JSON-RPC, and a
+# tight cap is free protection. Writing changes that: the body now carries a
+# whole file, JSON-escaped, so main() raises this when --writable is on. Leaving
+# it at 64 KB made every file above that size silently unwritable -- the request
+# was rejected at the HTTP layer before write_file ever ran.
 MAX_REQUEST_BYTES = 64 * 1024
 # Files above this are not worth scanning line by line during a search.
 MAX_SEARCH_FILE_BYTES = 8 * 1024 * 1024
+# A write is capped too. No source file here is megabytes, and a loop writing
+# forever is a worse outcome than a refused write.
+MAX_WRITE_BYTES = 2 * 1024 * 1024
 # Read in chunks and cap any single line. Text-mode line iteration calls
 # readline(), which reads until a newline arrives -- so a minified bundle or a
 # one-line .rbxlx would be pulled whole into memory despite the streaming claim.
@@ -119,6 +125,10 @@ SUSPICIOUS = ("env", "secret", "token", "key", "cred", "password", "passwd", "au
 ROOT: pathlib.Path
 TOKEN: str
 ALLOW_SECRETS = False
+# Off unless the operator turns it on. Read-only stays the default posture:
+# writing is opt-in per run and announced in the banner, so the folder is never
+# writable by accident or by a config file nobody reread.
+WRITABLE = False
 
 
 # --------------------------------------------------------------------------- paths
@@ -310,6 +320,21 @@ TOOLS = [
                 "path": {"type": "string", "description": "Subfolder to search. Optional."},
             },
             "required": ["pattern"],
+        },
+    },
+    {
+        "name": "write_file",
+        "description": (
+            "Create or replace a UTF-8 text file inside the shared root. "
+            "Only available when the bridge was started with --writable."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string", "description": "The complete new file contents."},
+            },
+            "required": ["path", "content"],
         },
     },
     {
@@ -547,10 +572,63 @@ def tool_find_files(args: dict) -> str:
     return head + ("\n" + "\n".join(hits) if hits else "")
 
 
+def tool_write_file(args: dict) -> str:
+    """Create or replace a UTF-8 text file inside the shared root.
+
+    The root IS the boundary, and it is the same one reading uses: resolve()
+    rejects traversal, drive letters, NTFS stream suffixes and trailing-dot
+    spellings before anything touches the disk. Inside the folder the operator
+    chose, anything may be written.
+
+    Deliberately still absent: delete, move and execute. Replacing a file is not
+    the same as removing one or running one.
+    """
+    if not WRITABLE:
+        return (
+            "refused: this bridge is read-only. "
+            "Restart it with --writable to allow edits."
+        )
+
+    target = resolve(args["path"])
+    refusal = guard(target)
+    if refusal:
+        return refusal
+
+    content = args.get("content")
+    if not isinstance(content, str):
+        return "refused: content must be a string"
+
+    encoded = content.encode("utf-8")
+    if len(encoded) > MAX_WRITE_BYTES:
+        return f"refused: {len(encoded):,} bytes exceeds the {MAX_WRITE_BYTES:,} byte write limit"
+    if target.is_dir():
+        return f"refused: {args['path']} is a directory"
+
+    existed = target.is_file()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Keep what was there. This folder has no version control, and the
+        # writer is at the far end of a tunnel with no way to try the result
+        # first, so a wrong edit should cost a rename to undo.
+        if existed:
+            target.with_name(target.name + ".bak").write_bytes(target.read_bytes())
+        target.write_bytes(encoded)
+    except OSError as exc:
+        return f"error writing {args['path']}: {exc}"
+
+    lines = content.count("\n") + (0 if content.endswith("\n") else 1)
+    return (
+        f"{'replaced' if existed else 'created'} {args['path']}: "
+        f"{len(encoded):,} bytes, {lines:,} lines"
+        + (f" (previous kept as {target.name}.bak)" if existed else "")
+    )
+
+
 def tool_describe_root(_args: dict) -> str:
     return (
         f"sharing: {ROOT}\n"
-        f"access: READ ONLY — no write, delete or execute tools exist\n"
+        f"access: {'READ AND WRITE within this folder' if WRITABLE else 'READ ONLY'}"
+        f" — no delete, move or execute tool exists either way\n"
         f"response cap: {MAX_RESPONSE_BYTES:,} bytes per read; larger files page "
         f"via offset/limit rather than being refused\n"
         f"text only: non-UTF-8 files are refused, not streamed\n"
@@ -560,6 +638,7 @@ def tool_describe_root(_args: dict) -> str:
 
 
 HANDLERS = {
+    "write_file": tool_write_file,
     "list_directory": tool_list_directory,
     "read_file": tool_read_file,
     "search_files": tool_search_files,
@@ -717,15 +796,18 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    global ROOT, TOKEN, ALLOW_SECRETS
+    global ROOT, TOKEN, ALLOW_SECRETS, WRITABLE, MAX_REQUEST_BYTES
 
-    parser = argparse.ArgumentParser(description="Read-only MCP bridge to a folder on this machine.")
-    parser.add_argument("--root", required=True, help="folder to share, read only")
+    parser = argparse.ArgumentParser(description="MCP bridge to one folder on this machine.")
+    parser.add_argument("--root", required=True, help="folder to share")
     parser.add_argument("--token", default=os.environ.get("MCP_TOKEN", ""),
                         help="bearer token clients must present (or set MCP_TOKEN)")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--host", default="127.0.0.1",
                         help="keep this on localhost and put a tunnel in front")
+    parser.add_argument("--writable", action="store_true",
+                        help="allow files inside --root to be created and replaced. "
+                             "Still no delete, move or execute.")
     parser.add_argument("--allow-secrets", action="store_true",
                         help="DISABLE the credential filters. Everything readable becomes "
                              "readable, including SSH keys and browser password stores.")
@@ -740,6 +822,11 @@ def main() -> int:
     ROOT = pathlib.Path(args.root).expanduser().resolve()
     TOKEN = args.token
     ALLOW_SECRETS = args.allow_secrets
+    WRITABLE = args.writable
+    if WRITABLE:
+        # Room for a max-size file after JSON escaping, which can roughly double
+        # it in the worst case, plus the envelope around it.
+        MAX_REQUEST_BYTES = MAX_WRITE_BYTES * 2 + 64 * 1024
 
     if not ROOT.is_dir():
         print(f"error: {ROOT} is not a directory", file=sys.stderr)
@@ -748,17 +835,24 @@ def main() -> int:
     # Sharing a drive root or a home directory is a different proposition from
     # sharing a project folder. Say so plainly rather than letting it pass.
     wide = ROOT == pathlib.Path(ROOT.anchor) or ROOT == pathlib.Path.home()
-    if wide or ALLOW_SECRETS:
+    if wide or ALLOW_SECRETS or WRITABLE:
         print("=" * 68)
         if wide:
             print(f"WIDE SHARE: {ROOT} covers everything below it.")
         if ALLOW_SECRETS:
             print("CREDENTIAL FILTERS ARE OFF. Keys and password stores are readable.")
+        if WRITABLE:
+            print("WRITING IS ON. Files in this folder can be created and replaced.")
+            print("Roblox runs the .luau files in it, so treat the token accordingly.")
         print("Anyone with the URL and token gets this. Kill the tunnel when done.")
         print("=" * 68)
 
-    print(f"sharing {ROOT} (read only) on http://{args.host}:{args.port}")
-    print("tools: list_directory, read_file, search_files, find_files, describe_root")
+    mode = "read and write" if WRITABLE else "read only"
+    print(f"sharing {ROOT} ({mode}) on http://{args.host}:{args.port}")
+    print(
+        "tools: list_directory, read_file, search_files, find_files, describe_root"
+        + (", write_file" if WRITABLE else "")
+    )
     print("Ctrl-C to stop. Nothing can reach this until you put a tunnel in front of it.\n")
 
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
