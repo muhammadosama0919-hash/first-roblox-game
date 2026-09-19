@@ -21,3 +21,8 @@
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Python bytecode from running the bridge locally. Machine-specific and
+# regenerated on every run; one copy got committed by accident.
+__pycache__/
+*.pyc
