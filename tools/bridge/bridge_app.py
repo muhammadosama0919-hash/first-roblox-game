@@ -121,6 +121,14 @@ def first_run(config: dict) -> dict:
         config["ngrok_domain"] = domain.strip().replace("https://", "").rstrip("/")
     print()
 
+    print("  3. Should Claude be able to EDIT files in that folder?")
+    print("       n) read only — Claude reads your code and hands you changes")
+    print("       y) read and write — Claude edits the files directly")
+    print("     Roblox runs the .luau files in this folder, so with writing on,")
+    print("     anyone holding the token can change code your machine will run.")
+    config["writable"] = (input("     y or n [n]: ").strip().lower() or "n").startswith("y")
+    print(f"     -> {'read and write' if config['writable'] else 'read only'}\n")
+
     config["token"] = secrets.token_hex(24)
     return config
 
@@ -166,10 +174,16 @@ def self_check(token: str) -> tuple[bool, str]:
         return False, f"{type(exc).__name__}: {exc}"
 
 
-def start_server(root: str, token: str) -> ThreadingHTTPServer:
+def start_server(root: str, token: str, writable: bool = False) -> ThreadingHTTPServer:
     machine_mcp.ROOT = pathlib.Path(root).expanduser().resolve()
     machine_mcp.TOKEN = token
     machine_mcp.ALLOW_SECRETS = False
+    machine_mcp.WRITABLE = writable
+    if writable:
+        # The request body now carries a whole file, JSON-escaped. Left at the
+        # read-only cap, every file over 64 KB would be rejected by the HTTP
+        # layer before write_file ever saw it.
+        machine_mcp.MAX_REQUEST_BYTES = machine_mcp.MAX_WRITE_BYTES * 2 + 64 * 1024
 
     server = BridgeServer(("127.0.0.1", PORT), machine_mcp.Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -296,15 +310,26 @@ def main() -> int:
     if override:
         config["tunnel"] = override
     root, token, domain = config["root"], config["token"], config.get("ngrok_domain", "")
+    # A config written before writing existed has no key, and the safe reading
+    # of a missing answer is no.
+    writable = bool(config.get("writable", False))
+    if "--read-only" in sys.argv:
+        writable = False
+    elif "--writable" in sys.argv:
+        writable = True
 
     print(f"  sharing  {root}")
     print(f"  config   {path}")
-    print(f"  access   READ ONLY — no write, delete or execute tool exists")
+    if writable:
+        print(f"  access   READ AND WRITE — Claude can change files in this folder")
+        print(f"           no delete, move or execute; overwrites keep a .bak")
+    else:
+        print(f"  access   READ ONLY — no write, delete or execute tool exists")
     print(f"  tunnel   {config.get('tunnel', 'auto')}")
     print()
 
     try:
-        start_server(root, token)
+        start_server(root, token, writable)
     except OSError as exc:
         print(f"  Could not open port {PORT}: {exc}")
         print("  Another copy is probably already running. Close it and retry.")
