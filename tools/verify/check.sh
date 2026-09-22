@@ -1,31 +1,55 @@
 #!/usr/bin/env bash
-# Execute src/server/Manor.luau for real (against the Roblox API shim), then
-# prove the result is walkable and render it. Exits non-zero on any failure.
+# Build each house for real (the unmodified module, run against the Roblox API
+# shim), prove it, and export it as a model file. Stops at the first failure.
 #
-# Needs bin/luau and bin/stylua next to this script; README.md says where
-# they come from.
+#   tools/verify/check.sh               all three houses
+#   tools/verify/check.sh Villa         just one
+#   RENDER=1 tools/verify/check.sh      also write preview renders to out/<House>/
+#
+# Needs the binaries in bin/ and api.json next to this script; README.md says
+# where they come from.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MANOR="${1:-../../src/server/Manor.luau}"
-
-echo "== stylua"
-./bin/stylua --check "$MANOR"
-
-echo "== execute"
-python3 compose.py "$MANOR" >/dev/null
-./bin/luau combined.luau > parts.tsv
-grep -E '^(PRINT|WARN|ERROR|BADPART)' parts.tsv || true
-if grep -qE '^(ERROR|BADPART|WARN)' parts.tsv; then
-	echo "!! module reported a problem while building"
-	exit 1
+if [ $# -gt 0 ]; then
+	houses=("$@")
+else
+	houses=(Manor Villa Lodge)
 fi
 
-echo "== walkability"
-python3 nav.py
+echo "== stylua"
+./bin/stylua --check ../../src/server/Houses
 
-echo "== render (tools/verify/out/)"
-python3 render2.py hero detail cutaway 2>/dev/null | tail -4
+# The sourcemap is how the checker resolves `require(script.Parent.HouseKit)`.
+# Rojo derives it from the real project, so it cannot drift from it. Both run
+# from the repo root because the sourcemap's paths are relative to it.
+echo "== luau-lsp (strict types)"
+mkdir -p work
+(
+	cd ../..
+	tools/verify/bin/rojo sourcemap default.project.json -o tools/verify/work/sourcemap.json
+	tools/verify/bin/luau-lsp analyze --platform=roblox \
+		--definitions=tools/verify/bin/globalTypes.d.luau \
+		--sourcemap=tools/verify/work/sourcemap.json \
+		src/server/Houses/*.luau
+)
 
-echo "== export (build/Manor.rbxm, build/Manor.rbxmx)"
-python3 export.py
+for house in "${houses[@]}"; do
+	echo
+	echo "== $house: build"
+	python3 compose.py "$house"
+
+	echo "== $house: lights, pale surfaces, door swings, furniture in walls"
+	python3 checks.py "$house"
+
+	echo "== $house: walkability"
+	python3 nav.py "$house"
+
+	if [ "${RENDER:-0}" = 1 ]; then
+		echo "== $house: renders (tools/verify/out/$house/)"
+		python3 views.py "$house" >/dev/null
+	fi
+
+	echo "== $house: export (build/$house.rbxm, build/$house.rbxmx)"
+	python3 export.py "$house"
+done

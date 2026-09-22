@@ -22,6 +22,13 @@ placed geometry is destroyed with no warning and no merge. Send the `.rbxmx`
 models instead; they carry only code and insert into an existing place. This
 matters now that meshes are being imported by hand.
 
+**The houses are delivered as model files, sent straight to the developer.**
+`tools/verify/export.py` writes `build/Manor.rbxm`, `build/Villa.rbxm` and
+`build/Lodge.rbxm`: each a complete house with its own copy of the door script
+inside, which they download and insert into their place. They asked for the
+model itself, not an `.rbxl`, and said plainly that git is never how files
+reach their machine, so a push is not a delivery. Send the file.
+
 Two related traps, both verified against the API reference:
 - `MeshPart.MeshId` is **read-only from scripts**, so a mesh cannot be swapped
   onto a part in Luau. Meshes must be imported, or created through
@@ -47,15 +54,21 @@ What **can** be verified, and should be, every time:
   to confirm instances, properties and embedded source actually landed.
 - Simulating pure logic in Python — `World.heightAt` was checked this way and it
   caught a bug that would have flooded 1648 terrain cells outside the pond.
-- **Executing a geometry module for real.** `tools/verify/check.sh` runs the
-  actual `Manor.luau` under the Luau CLI against a shim of the Roblox API
-  (`roblox_shim.luau`), captures every part, flood-fills the result with a
-  character-sized probe to prove every room, stair and hiding place is
-  reachable and the roofs are not, and renders it with a z-buffer so a hole
-  in the roof is a hole in the picture. This found a stair whose treads ate
-  into the corridor beside it and a wardrobe buried to its waist in a floor,
-  neither of which any static check could see. Use it for anything built
-  from parts. `tools/verify/README.md` has the setup.
+- **Executing a geometry module for real.** `tools/verify/check.sh` runs each
+  house module unmodified under the Luau CLI against a shim of the Roblox API
+  (`roblox_shim.luau`) and captures every part. Per house, it then proves
+  there is no light and nothing pale inside, swings every door to see that it
+  hits nothing, tests every piece of furniture against the walls, floors and
+  stairs, flood-fills with a character-sized probe to prove every room,
+  stair and hiding place is reachable and the roofs are not (and that the
+  villa's two doors are its only ways out), exports the `.rbxm` and reads it
+  back part by part. `RENDER=1` adds z-buffer renders, where a hole in the
+  roof is a hole in the picture. This found a stair whose treads ate into the
+  corridor beside it, a wardrobe buried to its waist in a floor, sill logs
+  across doorways and door after door that swung into furniture, none of
+  which any static check could see. It also type-checks the houses in strict
+  mode with `luau-lsp`. Use it for anything built from parts.
+  `tools/verify/README.md` has the setup.
 
 What **cannot** be verified here is anything that only fails at runtime. Four
 bugs shipped that way; the developer's **Output window** log found each one in
@@ -109,6 +122,16 @@ src/
                           store names so playtests cannot touch live saves.
     ShopService.luau      Purchase validation, item effects, sprint state.
     World.luau            Terrain, pond, trees, cabin — all procedural.
+    Houses/
+      HouseKit.luau       Shared building vocabulary: walls with holes,
+                          windows, doors, stairs, rods, triangles, palette.
+      Furnish.luau        Furniture. Every piece a Model tagged Furniture.
+      Decor.luau          Dead lamps, pictures, trophies, dirt and damage.
+      Manor.luau          House #1. Villa.luau is #2, Lodge.luau is #3.
+      DoorController.server.luau   Opens every Door-tagged model. A copy is
+                          embedded in each exported house model.
+      ManorSpawn.server.luau       Builds the manor if none is placed, and
+                          clears trees from under every house.
   client/
     Main.client.luau      Coin spin, pickup popup.
     Shop.client.luau      Shop menu.
@@ -116,6 +139,7 @@ src/
   shared/
     Config.luau           Every tunable number. Change gameplay here.
     Shop.luau             Item list — name, price, effect.
+tools/verify/             Runs the houses without Roblox. See its README.
 ```
 
 Most visual quality comes from `Lighting` in `place.project.json`, not geometry:
@@ -145,19 +169,44 @@ Saving is off until the place is published — `GetDataStore` throws outright in
 an unpublished place. The code detects this at startup and says so once. The
 yellow `[PlayerData]` warnings are expected, not failures.
 
-`Manor.luau` builds a derelict three-floor manor from ~1500 Parts and
-WedgeParts: two storeys of rooms plus an open attic, a switchback stair
-through a double-height hall, a projecting gabled bay, a porch, and five
-built-in cupboards to hide in (a pantry, two closets, the space under each
-flight), each with an invisible volume tagged `HidingSpot`. There is no
-furniture: the developer asked for nothing inside but architecture. It is
-deliberately standalone — requires nothing, reads no Config — so it drops
-into any version of the project. Its pivot is at ground level under the
-front steps, facing the way the house faces. `ManorSpawn.server.luau` places it: set `PIVOT` there; it finds
-the ground itself by raycasting the terrain and clears trees from its
-footprint. The house is asymmetric on purpose: a symmetrical plan with a
-centred porch read as a chapel, and it took a projecting bay and a one-sided
-porch to make it read as a house.
+### The houses
+
+Three derelict horror houses, built entirely in code from Parts and
+WedgeParts in `src/server/Houses/`, furnished, and exported as models:
+
+- **Manor** (#1, ~5600 parts): Victorian, three floors. Four rooms round a
+  long hall downstairs; upstairs almost all one dining hall, the width of the
+  house, with a table laid for twenty; an attic the length of the roof. It
+  is asymmetric on purpose: a symmetrical plan with a centred porch read as
+  a chapel, and it took a projecting bay and a one-sided porch to make it
+  read as a house.
+- **Villa** (#2, ~6400 parts): Italianate brick, two floors and a flat roof
+  terrace reached through a belvedere. **Exactly two ways out** (front door,
+  kitchen door) — the developer asked for that. Every other window is
+  barred and the roof is fenced higher than a jump, and `nav.py` proves it.
+- **Lodge** (#3, ~3400 parts): one spacious storey of round logs, a great
+  room open to the trusses, a fieldstone chimney, trophy room, workshop.
+
+What the developer asked for, which a later change must not undo — the
+checks enforce the first three:
+
+- **No white inside.** Browns and dark colours only; nothing visible from
+  inside is paler than luminance 0.125. Window frames are dark too.
+- **No lit lamps.** No light instances, no Neon. Every bulb is dead.
+- **Every door opens**, by a prompt on its knob (`DoorController`).
+- **Rounded, not square**, wherever the real thing would be turned or
+  rolled: legs, rails, arms, knobs. Parts with `Shape` Cylinder or Ball.
+- Places to hide are tagged `HidingSpot` with a `Kind` attribute
+  (Cupboard, Wardrobe, UnderTable, UnderBed).
+
+Every window is glassless on purpose. In the manor and the lodge that means
+a player can climb out through one; only the villa bars them.
+
+Each house's pivot is on the ground in the middle of its footprint, facing
+the way the front door faces, so `house:PivotTo(CFrame.new(x, groundY, z))`
+stands it on the ground. `ManorSpawn.server.luau` builds a manor at its
+`PIVOT` if none is in the place, and clears the world generator's trees from
+under every house it finds (named `Manor`, `Villa` or `Lodge`).
 
 ## Conventions
 

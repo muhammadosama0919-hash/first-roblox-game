@@ -35,6 +35,22 @@ function methods:Cross(o)
 	)
 end
 
+function methods:Lerp(o, t)
+	return v3(self.X + (o.X - self.X) * t, self.Y + (o.Y - self.Y) * t, self.Z + (o.Z - self.Z) * t)
+end
+
+function methods:Min(o)
+	return v3(math.min(self.X, o.X), math.min(self.Y, o.Y), math.min(self.Z, o.Z))
+end
+
+function methods:Max(o)
+	return v3(math.max(self.X, o.X), math.max(self.Y, o.Y), math.max(self.Z, o.Z))
+end
+
+function methods:Abs()
+	return v3(math.abs(self.X), math.abs(self.Y), math.abs(self.Z))
+end
+
 Vector3.__index = function(self, key)
 	if key == "Magnitude" then
 		return math.sqrt(self.X * self.X + self.Y * self.Y + self.Z * self.Z)
@@ -125,6 +141,26 @@ function cframeMethods:ToWorldSpace(o)
 	return self * o
 end
 
+function cframeMethods:ToObjectSpace(o)
+	return self:Inverse() * o
+end
+
+function cframeMethods:PointToWorldSpace(v)
+	return self * v
+end
+
+function cframeMethods:PointToObjectSpace(v)
+	return self:Inverse() * v
+end
+
+function cframeMethods:VectorToWorldSpace(v)
+	return rotate(self, v)
+end
+
+function cframeMethods:VectorToObjectSpace(v)
+	return rotate(self:Inverse(), v)
+end
+
 -- Raw fields p/r/u/b resolve before this runs, so only the derived names below
 -- ever reach it.
 CFrame.__index = function(self, key)
@@ -142,6 +178,8 @@ CFrame.__index = function(self, key)
 		return rawget(self, "p").Y
 	elseif key == "Z" then
 		return rawget(self, "p").Z
+	elseif key == "Rotation" then
+		return cf(V3.zero, rawget(self, "r"), rawget(self, "u"), rawget(self, "b"))
 	end
 	return cframeMethods[key]
 end
@@ -163,9 +201,14 @@ end
 
 local CF
 CF = {
-	new = function(a, b, c)
+	new = function(a, b, c, ...)
 		if a == nil then
 			return cf(V3.zero, V3.xAxis, V3.yAxis, V3.zAxis)
+		end
+		if type(a) == "number" and select("#", ...) == 9 then
+			-- CFrame.new(x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22): rows.
+			local m = { ... }
+			return cf(v3(a, b, c), v3(m[1], m[4], m[7]), v3(m[2], m[5], m[8]), v3(m[3], m[6], m[9]))
 		end
 		if type(a) == "number" then
 			return cf(v3(a, b or 0, c or 0), V3.xAxis, V3.yAxis, V3.zAxis)
@@ -204,6 +247,16 @@ CF = {
 	end,
 }
 CF.fromEulerAnglesXYZ = CF.Angles
+
+-- Rodrigues: rotation of `angle` radians about the unit vector `axis`, right-handed.
+CF.fromAxisAngle = function(axis, angle)
+	local k = axis.Unit
+	local c, s = math.cos(angle), math.sin(angle)
+	local function rot(v)
+		return v * c + k:Cross(v) * s + k * (k:Dot(v) * (1 - c))
+	end
+	return cf(V3.zero, rot(V3.xAxis), rot(V3.yAxis), rot(V3.zAxis))
+end
 CF.lookAt = function(at, target)
 	return CF.new(at, target)
 end
@@ -214,6 +267,14 @@ CF.identity = cf(V3.zero, V3.xAxis, V3.yAxis, V3.zAxis)
 ----------------------------------------------------------------------
 
 local Color3MT = { __index = {} }
+
+function Color3MT.__index:Lerp(o, t)
+	return setmetatable({
+		R = self.R + (o.R - self.R) * t,
+		G = self.G + (o.G - self.G) * t,
+		B = self.B + (o.B - self.B) * t,
+	}, Color3MT)
+end
 
 local C3 = {
 	fromRGB = function(r, g, b)
@@ -247,10 +308,49 @@ local captured = {}
 
 local InstanceMT = {}
 
+local function isPart(inst)
+	local c = rawget(inst, "_props").ClassName
+	return c == "Part" or c == "WedgePart" or c == "CornerWedgePart"
+end
+
+-- A Model whose WorldPivot has never been set pivots on the middle of the
+-- box round its parts, world-aligned; one with no parts on the origin.
+local function defaultPivot(model)
+	local lo, hi
+	local function walk(node)
+		for _, d in rawget(node, "_children") do
+			if isPart(d) then
+				local c, s = d.CFrame, d.Size
+				if c and s then
+					local r, u, l = c.RightVector, c.UpVector, c.LookVector
+					local e = v3(
+						math.abs(r.X) * s.X / 2 + math.abs(u.X) * s.Y / 2 + math.abs(l.X) * s.Z / 2,
+						math.abs(r.Y) * s.X / 2 + math.abs(u.Y) * s.Y / 2 + math.abs(l.Y) * s.Z / 2,
+						math.abs(r.Z) * s.X / 2 + math.abs(u.Z) * s.Y / 2 + math.abs(l.Z) * s.Z / 2
+					)
+					local p = c.Position
+					local a, b = p - e, p + e
+					lo = if lo then v3(math.min(lo.X, a.X), math.min(lo.Y, a.Y), math.min(lo.Z, a.Z)) else a
+					hi = if hi then v3(math.max(hi.X, b.X), math.max(hi.Y, b.Y), math.max(hi.Z, b.Z)) else b
+				end
+			end
+			walk(d)
+		end
+	end
+	walk(model)
+	if not lo then
+		return CF.new(0, 0, 0)
+	end
+	return CF.new((lo.X + hi.X) / 2, (lo.Y + hi.Y) / 2, (lo.Z + hi.Z) / 2)
+end
+
 InstanceMT.__index = function(self, key)
 	local props = rawget(self, "_props")
 	if props[key] ~= nil then
 		return props[key]
+	end
+	if key == "WorldPivot" and props.ClassName == "Model" then
+		return defaultPivot(self)
 	end
 	return InstanceMT[key]
 end
@@ -284,10 +384,10 @@ function InstanceMT:IsA(className)
 		return true
 	end
 	if className == "BasePart" then
-		return c == "Part" or c == "WedgePart"
+		return c == "Part" or c == "WedgePart" or c == "CornerWedgePart"
 	end
 	if className == "PVInstance" then
-		return c == "Part" or c == "WedgePart" or c == "Model"
+		return c == "Part" or c == "WedgePart" or c == "CornerWedgePart" or c == "Model"
 	end
 	return false
 end
@@ -306,7 +406,19 @@ function InstanceMT:Destroy()
 end
 
 function InstanceMT:SetAttribute(k, v)
+	local t = type(v)
+	if v ~= nil and t ~= "number" and t ~= "string" and t ~= "boolean" then
+		error("shim: SetAttribute(" .. tostring(k) .. ") with a " .. t .. " is not captured", 2)
+	end
 	rawget(self, "_attrs")[k] = v
+end
+
+function InstanceMT:AddTag(tag)
+	table.insert(rawget(self, "_tags"), tag)
+end
+
+function InstanceMT:HasTag(tag)
+	return table.find(rawget(self, "_tags"), tag) ~= nil
 end
 
 function InstanceMT:GetAttribute(k)
@@ -316,11 +428,24 @@ end
 local ALLOWED = {
 	Part = true,
 	WedgePart = true,
+	CornerWedgePart = true,
 	Model = true,
 	Folder = true,
 	PointLight = true,
 	SpotLight = true,
 	SurfaceLight = true,
+}
+
+-- What Roblox gives a new part before any script touches it, so code that
+-- reads a property it never set sees the real default rather than nil.
+local PART_DEFAULTS = {
+	Transparency = 0,
+	Reflectance = 0,
+	CanCollide = true,
+	CanTouch = true,
+	CanQuery = true,
+	CastShadow = true,
+	Anchored = false,
 }
 
 local Instance = {
@@ -329,8 +454,14 @@ local Instance = {
 			error("shim: Instance.new(" .. tostring(className) .. ") is not implemented", 2)
 		end
 
+		local props = { ClassName = className, Name = className }
+		if className == "Part" or className == "WedgePart" or className == "CornerWedgePart" then
+			for k, v in PART_DEFAULTS do
+				props[k] = v
+			end
+		end
 		local self = setmetatable({
-			_props = { ClassName = className, Name = className },
+			_props = props,
 			_children = {},
 			_attrs = {},
 			_tags = {},
