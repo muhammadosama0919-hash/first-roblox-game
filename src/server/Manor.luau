@@ -145,24 +145,25 @@ local INNER_DOOR_W = 7
 local INNER_DOOR_H = 10
 
 --[[
-	Weathered brown, with most of the colour gone out of it. Old timber does
-	not stay brown; it greys from the surface in, and a house that has stood
-	empty long enough to be worth exploring is well down that road. The
-	dressings — corner boards, fascias, window frames — are a pale stone grey,
-	as painted trim that has lost its paint goes. Everything is chosen against
-	everything else, so the lanterns are the only warm thing in frame.
+	Dark, weathered timber with most of the colour gone out of it. Old wood
+	does not stay brown; it darkens and greys from the surface in, and a house
+	that has stood empty long enough to be worth exploring is well down that
+	road. The dressings — corner boards, fascias, window frames — are a dirty
+	stone grey, as painted trim that has lost its paint goes. Everything is
+	chosen against everything else, so the lanterns are the only warm thing
+	in frame.
 ]]
-local BOARD = Color3.fromRGB(110, 94, 78)
-local BOARD_DARK = Color3.fromRGB(90, 76, 62)
-local BOARD_PALE = Color3.fromRGB(128, 112, 96)
-local CLAPBOARD = Color3.fromRGB(100, 86, 72)
-local STONE = Color3.fromRGB(132, 126, 116)
-local STONE_DARK = Color3.fromRGB(104, 98, 90)
-local TRIM = Color3.fromRGB(154, 150, 142)
-local TIMBER = Color3.fromRGB(70, 58, 48)
-local SHINGLE = Color3.fromRGB(68, 62, 58)
-local FLOORBOARD = Color3.fromRGB(92, 74, 58)
-local PLASTER = Color3.fromRGB(146, 132, 112)
+local BOARD = Color3.fromRGB(86, 70, 54)
+local BOARD_DARK = Color3.fromRGB(68, 54, 42)
+local BOARD_PALE = Color3.fromRGB(104, 88, 70)
+local CLAPBOARD = Color3.fromRGB(74, 60, 46)
+local STONE = Color3.fromRGB(118, 112, 102)
+local STONE_DARK = Color3.fromRGB(92, 86, 78)
+local TRIM = Color3.fromRGB(138, 132, 122)
+local TIMBER = Color3.fromRGB(52, 42, 32)
+local SHINGLE = Color3.fromRGB(54, 48, 44)
+local FLOORBOARD = Color3.fromRGB(74, 58, 44)
+local PLASTER = Color3.fromRGB(126, 112, 94)
 local LANTERN = Color3.fromRGB(255, 176, 88)
 local WEB = Color3.fromRGB(226, 226, 222)
 
@@ -174,7 +175,7 @@ local WEB = Color3.fromRGB(226, 226, 222)
 local weatherRng = Random.new(8891)
 
 local function weathered(base: Color3, amount: number?): Color3
-	local range = amount or 0.09
+	local range = amount or 0.14
 	local k = 1 + weatherRng:NextNumber(-range, range)
 	return Color3.new(
 		math.clamp(base.R * k, 0, 1),
@@ -407,6 +408,12 @@ local function pierced(
 		local faceOffset = outward * (thickness / 2 + COURSE_DEPTH / 2)
 		local first = math.ceil((y0 + 0.5) / COURSE_SPACING) * COURSE_SPACING
 		for y = first, y1 - 0.5, COURSE_SPACING do
+			-- One board in sixteen has come away. A run of clapboards with a
+			-- gap in it is the cheapest "nobody has been here for years".
+			if weatherRng:NextNumber() < 0.06 then
+				continue
+			end
+
 			local boardSize, boardCentre
 			if axis == "X" then
 				boardSize = Vector3.new(b - a, COURSE_H, COURSE_DEPTH)
@@ -585,6 +592,13 @@ local function staircase(
 	local levelRotation = CFrame.fromMatrix(Vector3.zero, right, Vector3.yAxis, -ahead)
 
 	for i = 1, steps do
+		-- The odd tread has rotted through. Only ever a middle one, and the
+		-- ramp underneath still carries the player, so it costs nothing but
+		-- the look of it.
+		if i > 1 and i < steps and weatherRng:NextNumber() < 0.07 then
+			continue
+		end
+
 		local topY = bottom.Y + treadRise * i
 		local mid = bottom + ahead * (treadRun * (i - 0.5))
 
@@ -634,7 +648,7 @@ end
 
 --[[
 	A window: a frame, mullions, and in some the shards of glass still clinging
-	to the corners. No panes anywhere. Every window in the house is open, so a
+	to the corners or a cobweb across one. No panes anywhere. Every window in the house is open, so a
 	player inside can look out through any of them, and anything outside can
 	look in.
 
@@ -689,9 +703,11 @@ local function window(
 		local leaf = newPart(
 			"Door",
 			Vector3.new(leafW, height - 0.3, 0.4),
+			-- The roll is the door hanging off its top hinge: the far edge has
+			-- dropped, and the bottom corner has gone into the floor.
 			frame
 				* CFrame.new(-width / 2 + 0.2, 0, 0)
-				* CFrame.Angles(0, math.rad(-105), 0)
+				* CFrame.Angles(0, math.rad(-105), math.rad(-3))
 				* CFrame.new(leafW / 2, 0, 0),
 			TIMBER,
 			Enum.Material.Wood,
@@ -721,6 +737,27 @@ local function window(
 		}
 	do
 		bar.CanCollide = false
+	end
+
+	if style == "cobweb" then
+		-- A web across one top corner, just inside the opening. Translucent
+		-- and small enough that the view out is still the view out.
+		local webs = triangle(
+			"Cobweb",
+			(frame * CFrame.new(-width / 2 + 0.2, height / 2 - 0.2, 0.3)).Position,
+			(frame * CFrame.new(-width / 2 + 0.2 + width * 0.5, height / 2 - 0.2, 0.3)).Position,
+			(frame * CFrame.new(-width / 2 + 0.2, height / 2 - 0.2 - height * 0.55, 0.3)).Position,
+			0.08,
+			WEB,
+			Enum.Material.Fabric,
+			parent
+		)
+		for _, web in webs do
+			web.Transparency = 0.6
+			web.CanCollide = false
+			web.CastShadow = false
+		end
+		return
 	end
 
 	if style == "shards" then
@@ -789,7 +826,8 @@ end
 	next join, and a screenshot of a bug is reproducible.
 ]]
 local function styleFor(rng: Random): string
-	return if rng:NextNumber() < 0.35 then "shards" else "window"
+	local roll = rng:NextNumber()
+	return if roll < 0.35 then "shards" elseif roll < 0.55 then "cobweb" else "window"
 end
 
 --[[
@@ -971,7 +1009,7 @@ local function roofSlab(
 		"RoofSlope",
 		Vector3.new(xTo - xFrom, ROOF_T, length),
 		place(centre) * CFrame.Angles(side * ROOF_PITCH, 0, 0),
-		weathered(SHINGLE, 0.04),
+		weathered(SHINGLE, 0.07),
 		Enum.Material.RoofShingles,
 		parent
 	)
@@ -1250,7 +1288,7 @@ local function railing(name: string, deck: number, run: Run, place: Place, paren
 	for i = 0, count do
 		-- A few gone from the middle of each run. The ends stay: a run that has
 		-- lost its end baluster reads as unfinished rather than old.
-		if i > 0 and i < count and weatherRng:NextNumber() < 0.18 then
+		if i > 0 and i < count and weatherRng:NextNumber() < 0.24 then
 			continue
 		end
 
@@ -1654,7 +1692,7 @@ local function decay(rng: Random, place: Place, parent: Instance)
 	-- line on an otherwise flat wall as damage. Never on the front: there they
 	-- would hang in the porch and across the bay, where a board in mid-air
 	-- reads as a mistake rather than as decay.
-	for _ = 1, 30 do
+	for _ = 1, 44 do
 		local onX = rng:NextNumber() < 0.6
 		local side = if rng:NextNumber() < 0.5 then 1 else -1
 		if not onX then
@@ -2065,7 +2103,7 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		if x1 - x0 < 8 then
 			return
 		end
-		for _ = 1, rng:NextInteger(0, 2) do
+		for _ = 1, rng:NextInteger(1, 3) do
 			local w = rng:NextNumber(2.5, 6)
 			local x = rng:NextNumber(x0 + w / 2 + 0.5, x1 - w / 2 - 0.5)
 			local out = rng:NextNumber(3, ROOF_RUN - 4)
