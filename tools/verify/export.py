@@ -12,12 +12,16 @@ and .rbxmx from that, so every property is encoded by the same library Rojo
 uses for everything else, and then reads the .rbxmx back and checks it
 against the capture, part by part: position, size, the full rotation matrix,
 colour, material, shape, transparency, collision, tags and attributes; and
-for the house as a whole, its pivot, its doors and the door script inside it.
+for the house as a whole, its pivot, its doors and the scripts inside it.
+The .rbxm, which is the file that gets sent, goes back through Rojo into XML
+and gets the same checks.
 
-The model carries its own copy of DoorController as a Script, so it works
-the moment it is inserted, with nothing else in the place. Its pivot is on
-the ground at the middle of the footprint, facing the way the house faces,
-so `house:PivotTo(CFrame.new(x, groundY, z))` stands it on the ground.
+The model carries its own copies of DoorController and Groundwork as
+Scripts, so the moment it is inserted, with nothing else in the place, its
+doors open, and in this project's generated world it stands itself on the
+ground and clears the trees out of its rooms. Its pivot is on the ground at
+the middle of the footprint, facing the way the house faces, so
+`house:PivotTo(CFrame.new(x, groundY, z))` stands it on the ground.
 
 Rojo takes a CFrame as twelve numbers: the position, then the rotation
 matrix row by row. A row is (right.x, up.x, back.x), which is how the basis
@@ -42,7 +46,11 @@ HERE = pathlib.Path(__file__).parent
 ROOT = HERE.parent.parent
 BUILD = ROOT / "build"
 WORK = HERE / "work"
-DOOR_SCRIPT = ROOT / "src" / "server" / "Houses" / "DoorController.server.luau"
+# The scripts every house model carries inside it, by the name they get there.
+EMBEDDED = {
+    "DoorController": ROOT / "src" / "server" / "Houses" / "DoorController.server.luau",
+    "Groundwork": ROOT / "src" / "server" / "Houses" / "Groundwork.server.luau",
+}
 ROJO = HERE / "bin" / "rojo"
 if not ROJO.exists():
     ROJO = "rojo"
@@ -125,13 +133,10 @@ def build_tree(cap):
     for p in cap.parts:
         children_of.setdefault(p.parent, []).append(("part", p))
     tree = node_json(cap, root, children_of)
-    tree.setdefault("children", []).append(
-        {
-            "name": "DoorController",
-            "className": "Script",
-            "properties": {"Source": DOOR_SCRIPT.read_text()},
-        }
-    )
+    for name, path in EMBEDDED.items():
+        tree.setdefault("children", []).append(
+            {"name": name, "className": "Script", "properties": {"Source": path.read_text()}}
+        )
     del tree["name"]  # the root takes its name from the file
     return root, tree
 
@@ -208,7 +213,7 @@ def read_attributes(el):
     return out
 
 
-def verify(rbxmx, cap, root, material_values):
+def verify(rbxmx, cap, root, material_values, quiet=False):
     doc = ET.parse(rbxmx).getroot()
     problems = []
 
@@ -272,7 +277,7 @@ def verify(rbxmx, cap, root, material_values):
 
     missing = sum(len(v) for v in expected.values())
 
-    # The house as a whole: its pivot, its doors, the script.
+    # The house as a whole: its pivot, its doors, its scripts.
     models = [i for i in doc.iter("Item") if i.get("class") == "Model"]
     top = doc.find("Item")
     pivot_ok = False
@@ -292,21 +297,30 @@ def verify(rbxmx, cap, root, material_values):
         a = read_attributes(prop(d, "AttributesSerialize"))
         if not isinstance(a.get("OpenAngle"), float):
             problems.append(f"door {prop(d, 'Name').text} has no OpenAngle")
-    scripts = [i for i in doc.iter("Item") if i.get("class") == "Script"]
-    source_ok = len(scripts) == 1 and (prop(scripts[0], "Source").text or "").strip() == DOOR_SCRIPT.read_text().strip()
-    if not source_ok:
-        problems.append("DoorController script missing from the model or its source differs")
+    # Each embedded script directly inside the house, source byte for byte
+    # what is in src/, and no other code anywhere in the model.
+    top_scripts = {}
+    for i in top.findall("Item") if top is not None else []:
+        if i.get("class") == "Script":
+            top_scripts[prop(i, "Name").text] = (prop(i, "Source").text or "").strip()
+    code = sum(1 for i in doc.iter("Item") if i.get("class") in ("Script", "LocalScript", "ModuleScript"))
+    scripts_ok = code == len(EMBEDDED) and all(
+        top_scripts.get(name) == path.read_text().strip() for name, path in EMBEDDED.items()
+    )
+    if not scripts_ok:
+        problems.append(f"the model's scripts are not exactly {', '.join(EMBEDDED)} as they are in src/")
     lights = sum(1 for i in doc.iter("Item") if i.get("class") in ("PointLight", "SpotLight", "SurfaceLight"))
 
-    print(f"  parts checked   {checked} of {len(cap.parts)}")
-    print(f"  parts missing   {missing}")
-    print(f"  worst rotation  {worst_rot:.2e}   (any convention error would be ~1e0)")
-    print(f"  round parts     {shapes['Cylinder']} cylinders, {shapes['Ball']} balls")
-    print(f"  doors           {len(doors)}, each with its OpenAngle")
-    print(f"  hiding places   {attr_parts} parts carry attributes")
-    print(f"  pivot           {'ground level, middle of the footprint' if pivot_ok else 'WRONG'}")
-    print(f"  door script     {'inside the model' if source_ok else 'MISSING'}")
-    print(f"  lights          {lights}")
+    if not quiet:
+        print(f"  parts checked   {checked} of {len(cap.parts)}")
+        print(f"  parts missing   {missing}")
+        print(f"  worst rotation  {worst_rot:.2e}   (any convention error would be ~1e0)")
+        print(f"  round parts     {shapes['Cylinder']} cylinders, {shapes['Ball']} balls")
+        print(f"  doors           {len(doors)}, each with its OpenAngle")
+        print(f"  hiding places   {attr_parts} parts carry attributes")
+        print(f"  pivot           {'ground level, middle of the footprint' if pivot_ok else 'WRONG'}")
+        print(f"  scripts         {', '.join(EMBEDDED) + ' inside the model' if scripts_ok else 'WRONG'}")
+        print(f"  lights          {lights}")
     if worst_rot > 1e-4:
         problems.append(f"rotation matrices differ by up to {worst_rot}")
     if missing:
@@ -347,12 +361,28 @@ def main():
     print(f"wrote {rbxmx.name} ({rbxmx.stat().st_size:,} bytes) and {rbxm.name} ({rbxm.stat().st_size:,} bytes)")
     print("readback:")
     problems = verify(rbxmx, cap, root, material_values)
+
+    # The .rbxm is the file that gets sent, and it cannot be read here
+    # directly. Rojo can: a project whose tree is the .rbxm builds back into
+    # XML, which gets the same checks. Numbers go through 32-bit floats in
+    # the binary format, which the checks' tolerances already allow for.
+    back = WORK / f"{house}.rbxm.project.json"
+    back.write_text(json.dumps({"name": house, "tree": {"$path": str(rbxm.resolve())}}) + "\n")
+    back_xml = WORK / f"{house}.from-rbxm.rbxmx"
+    res = rojo_build(back, back_xml)
+    if res.returncode != 0:
+        problems.append(f"rojo could not read {rbxm.name} back: {res.stderr.strip()[-300:]}")
+    else:
+        binary = [f"{rbxm.name}: {p}" for p in verify(back_xml, cap, root, material_values, quiet=True)]
+        print(f"  {rbxm.name:15} read back through Rojo: {'matches' if not binary else 'DIFFERS'}")
+        problems += binary
+
     for p in problems[:20]:
         print("  !!", p)
     if problems:
         print(f"EXPORT FAILED: {len(problems)} problems")
         sys.exit(1)
-    print("EXPORT OK: file matches capture")
+    print("EXPORT OK: both files match the capture")
 
 
 if __name__ == "__main__":

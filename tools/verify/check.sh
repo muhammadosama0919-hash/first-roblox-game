@@ -34,6 +34,10 @@ mkdir -p work
 		src/server/Houses/*.luau
 )
 
+# The script inside every house that stands it on the generated ground.
+echo "== Groundwork (the real script, against a mocked world)"
+python3 groundwork.py
+
 for house in "${houses[@]}"; do
 	echo
 	echo "== $house: build"

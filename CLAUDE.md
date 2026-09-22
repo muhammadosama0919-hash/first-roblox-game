@@ -24,10 +24,11 @@ matters now that meshes are being imported by hand.
 
 **The houses are delivered as model files, sent straight to the developer.**
 `tools/verify/export.py` writes `build/Manor.rbxm`, `build/Villa.rbxm` and
-`build/Lodge.rbxm`: each a complete house with its own copy of the door script
-inside, which they download and insert into their place. They asked for the
-model itself, not an `.rbxl`, and said plainly that git is never how files
-reach their machine, so a push is not a delivery. Send the file.
+`build/Lodge.rbxm`: each a complete house with its own copies of
+`DoorController` and `Groundwork` inside, which they download and insert into
+their place. They asked for the model itself, not an `.rbxl`, and said plainly
+that git is never how files reach their machine, so a push is not a delivery.
+Send the file.
 
 Two related traps, both verified against the API reference:
 - `MeshPart.MeshId` is **read-only from scripts**, so a mesh cannot be swapped
@@ -130,6 +131,9 @@ src/
       Manor.luau          House #1. Villa.luau is #2, Lodge.luau is #3.
       DoorController.server.luau   Opens every Door-tagged model. A copy is
                           embedded in each exported house model.
+      Groundwork.server.luau       Also embedded in each house: levels the
+                          generated ground under it, stands it there, clears
+                          the trees out of it.
       ManorSpawn.server.luau       Builds the manor if none is placed, and
                           clears trees from under every house.
   client/
@@ -204,9 +208,16 @@ a player can climb out through one; only the villa bars them.
 
 Each house's pivot is on the ground in the middle of its footprint, facing
 the way the front door faces, so `house:PivotTo(CFrame.new(x, groundY, z))`
-stands it on the ground. `ManorSpawn.server.luau` builds a manor at its
-`PIVOT` if none is in the place, and clears the world generator's trees from
-under every house it finds (named `Manor`, `Villa` or `Lodge`).
+stands it on the ground. The world's terrain only exists once the game runs,
+so a house placed in Studio's editor cannot be put on it by hand: the
+`Groundwork` script inside each house does it at server start, levelling a
+pad at the middle height of the ground it covers, moving the house onto it
+(height only) and clearing the generator's trees from its footprint. In a
+place without the generator it touches nothing. `groundwork.py` runs it
+against a mocked world. `ManorSpawn.server.luau` builds a manor at its
+`PIVOT` if none is in the place, and also clears trees from under every
+house it finds. `DoorController` reads each hinge live on every step, so a
+house moved at runtime still swings its doors in the right place.
 
 ## Conventions
 

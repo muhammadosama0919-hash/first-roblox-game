@@ -34,7 +34,14 @@ Then, from the capture:
   `build/<House>.rbxm` and `.rbxmx`, then reads the `.rbxmx` back and checks
   every part's position, size, rotation matrix, colour, material, shape,
   transparency, collision, tags and attributes against the capture, plus the
-  model's pivot, its doors and the `DoorController` script inside it.
+  model's pivot, its doors and the `DoorController` and `Groundwork` scripts
+  inside it. The `.rbxm`, the file that actually gets sent, is built back
+  into XML by Rojo and gets the same checks.
+
+And one check that is not per house: `groundwork.py` runs the real
+`Groundwork.server.luau`, the script in every house that levels the
+generated ground under it, stands it there and clears the trees out, against
+a mocked world with a slope, a turned house and trees in and out of it.
 
 `houses.py` says, for each house, what the walkability check must reach and
 must not, and where the renders look.

@@ -49,8 +49,8 @@ local function wire(door: Instance)
 	-- The Hinge stays where the door is closed. Every other part is recorded
 	-- relative to the hinge turned to wherever the door stands now, and put
 	-- back relative to the hinge turned to the new angle on every step.
-	local closed = hinge.CFrame
-	local now = closed * CFrame.Angles(0, math.rad(angle), 0)
+	local hingePart: BasePart = hinge
+	local now = hingePart.CFrame * CFrame.Angles(0, math.rad(angle), 0)
 	local offsets: { [BasePart]: CFrame } = {}
 	local leaves: { BasePart } = {}
 	local handle: BasePart? = nil
@@ -75,7 +75,11 @@ local function wire(door: Instance)
 	value.Value = angle
 	value.Parent = hinge
 	value.Changed:Connect(function(a: number)
-		local frame = closed * CFrame.Angles(0, math.rad(a), 0)
+		-- The hinge is read on every step rather than remembered: if the house
+		-- is moved after this ran (Groundwork standing it on the ground, or
+		-- any PivotTo), a remembered frame would swing the door back to where
+		-- the house used to be.
+		local frame = hingePart.CFrame * CFrame.Angles(0, math.rad(a), 0)
 		for part, offset in offsets do
 			part.CFrame = frame * offset
 		end
