@@ -13,6 +13,8 @@
 # workflow. If you later run Rojo locally, stop committing these.
 !build/*.rbxl
 !build/*.rbxmx
+# A model in binary form is the same deliverable at a fraction of the size.
+!build/*.rbxm
 
 # Toolchain managers
 /.rokit/

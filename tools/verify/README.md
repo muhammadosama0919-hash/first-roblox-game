@@ -19,15 +19,24 @@ Then, from the captured parts:
 - `render2.py` rasterises the house with a z-buffer, procedural material
   patterns and edge lines. Not what Studio will show, but honest about what
   geometry exists: a hole in the roof is a hole in the picture.
+- `export.py` writes the capture out as a Rojo JSON model, has Rojo build
+  `build/Manor.rbxm` and `build/Manor.rbxmx` from it, then reads the `.rbxmx`
+  back and checks every part's position, size, rotation matrix, colour,
+  material, transparency, collision and tags against the capture. The
+  rotation passes through Euler angles on the way in, which is exactly the
+  kind of conversion that is silently wrong by a sign.
 
 ## Setup
 
-Download the two binaries this needs into `bin/` (they are gitignored):
+Download the binaries this needs into `bin/` (they are gitignored), and the
+API dump the exporter reads material values from:
 
     mkdir -p bin && cd bin
     curl -sSL -o luau.zip   https://github.com/luau-lang/luau/releases/download/0.700/luau-ubuntu.zip
     curl -sSL -o stylua.zip https://github.com/JohnnyMorganz/StyLua/releases/download/v2.5.2/stylua-linux-x86_64.zip
-    unzip -o -q luau.zip && unzip -o -q stylua.zip && chmod +x luau stylua
+    curl -sSL -o rojo.zip   https://github.com/rojo-rbx/rojo/releases/download/v7.6.1/rojo-7.6.1-linux-x86_64.zip
+    unzip -o -q luau.zip && unzip -o -q stylua.zip && unzip -o -q rojo.zip && chmod +x luau stylua rojo
+    cd .. && curl -sSL -o api.json https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json
 
 Python needs `numpy`, `scipy` and `Pillow`.
 

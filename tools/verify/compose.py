@@ -6,6 +6,9 @@ Luau's CLI sandboxes each required module's globals, so `game`/`Vector3` set in
 one chunk are invisible in another. Wrapping both sources in functions inside a
 single chunk makes the shimmed API resolve as upvalues instead, which needs no
 edit to the module under test: its source text goes in byte for byte.
+
+The chunk prints one line per instance the module created. Parts carry their
+full geometry; folders, models and lights carry enough to rebuild the tree.
 """
 
 import pathlib
@@ -80,6 +83,19 @@ end
 realPrint("HIDING\\t" .. tostring(#result.hidingSpots))
 realPrint("REPORTED\\t" .. tostring(result.partCount))
 
+-- Every instance gets an id (its index in the capture) so the tree can be
+-- rebuilt afterwards: folders, models and lights are emitted by id and parent
+-- id, and each part line ends with its own id and parent id.
+local ids = {}
+for i, inst in shim.captured do
+\tids[inst] = i
+end
+
+local function parentId(inst)
+\tlocal parent = inst.Parent
+\treturn if parent and ids[parent] then tostring(ids[parent]) else "0"
+end
+
 local function pathOf(inst)
 \tlocal names = {}
 \tlocal node = inst.Parent
@@ -90,8 +106,32 @@ local function pathOf(inst)
 \treturn table.concat(names, "/")
 end
 
+for i, inst in shim.captured do
+\tlocal class = inst.ClassName
+\tif class == "Folder" or class == "Model" then
+\t\trealPrint(table.concat({ "NODE", tostring(i), class, inst.Name, parentId(inst) }, "\\t"))
+\telseif class == "PointLight" or class == "SpotLight" or class == "SurfaceLight" then
+\t\tlocal c = inst.Color
+\t\tlocal shadows = inst.Shadows
+\t\tif shadows == nil then
+\t\t\tshadows = false
+\t\tend
+\t\trealPrint(table.concat({
+\t\t\t"LIGHT",
+\t\t\ttostring(i),
+\t\t\tclass,
+\t\t\tinst.Name,
+\t\t\tparentId(inst),
+\t\t\tif c then string.format("%.4f,%.4f,%.4f", c.R, c.G, c.B) else "1,1,1",
+\t\t\tstring.format("%.3f", inst.Brightness or 1),
+\t\t\tstring.format("%.3f", inst.Range or 8),
+\t\t\ttostring(shadows),
+\t\t}, "\\t"))
+\tend
+end
+
 local emitted = 0
-for _, inst in shim.captured do
+for i, inst in shim.captured do
 \tlocal class = inst.ClassName
 \tif class ~= "Part" and class ~= "WedgePart" then
 \t\tcontinue
@@ -111,6 +151,14 @@ for _, inst in shim.captured do
 \tif collide == nil then
 \t\tcollide = true
 \tend
+\tlocal query = inst.CanQuery
+\tif query == nil then
+\t\tquery = true
+\tend
+\tlocal castShadow = inst.CastShadow
+\tif castShadow == nil then
+\t\tcastShadow = true
+\tend
 
 \trealPrint(table.concat({
 \t\t"PART",
@@ -127,6 +175,10 @@ for _, inst in shim.captured do
 \t\tstring.format("%.3f", transparency),
 \t\ttostring(collide),
 \t\ttable.concat(rawget(inst, "_tags"), ","),
+\t\ttostring(i),
+\t\tparentId(inst),
+\t\ttostring(query),
+\t\ttostring(castShadow),
 \t}, "\\t"))
 \temitted += 1
 end

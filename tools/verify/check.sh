@@ -26,3 +26,6 @@ python3 nav.py
 
 echo "== render (tools/verify/out/)"
 python3 render2.py hero detail cutaway 2>/dev/null | tail -4
+
+echo "== export (build/Manor.rbxm, build/Manor.rbxmx)"
+python3 export.py
