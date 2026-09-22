@@ -154,7 +154,9 @@ Kit.C = {
 	VELVET = rgb(70, 26, 25),
 	VELVET_DARK = rgb(48, 20, 20),
 	CLOTH = rgb(74, 60, 48),
-	LINEN = rgb(70, 61, 50), -- gone brown with age, never white
+	-- Gone brown with age, never white. Warmer than a grey: a long cloth is
+	-- the biggest lit surface in a room, and a grey one reads as white there.
+	LINEN = rgb(64, 52, 40),
 	LEATHER = rgb(56, 35, 25),
 	LEATHER_DARK = rgb(40, 26, 20),
 	RUG = rgb(64, 28, 24),
