@@ -30,6 +30,11 @@ their place. They asked for the model itself, not an `.rbxl`, and said plainly
 that git is never how files reach their machine, so a push is not a delivery.
 Send the file.
 
+Send an update as **one zipped folder**, not a scatter of separate files;
+they asked for exactly that. The models go at the top, with `previews/`,
+`source/`, and a `READ ME FIRST.txt` that says how to insert them and what
+changed. Check the zipped models are byte-identical to the verified builds.
+
 Two related traps, both verified against the API reference:
 - `MeshPart.MeshId` is **read-only from scripts**, so a mesh cannot be swapped
   onto a part in Luau. Meshes must be imported, or created through
