@@ -47,6 +47,15 @@ What **can** be verified, and should be, every time:
   to confirm instances, properties and embedded source actually landed.
 - Simulating pure logic in Python — `World.heightAt` was checked this way and it
   caught a bug that would have flooded 1648 terrain cells outside the pond.
+- **Executing a geometry module for real.** `tools/verify/check.sh` runs the
+  actual `Manor.luau` under the Luau CLI against a shim of the Roblox API
+  (`roblox_shim.luau`), captures every part, flood-fills the result with a
+  character-sized probe to prove every room, stair and hiding place is
+  reachable and the roofs are not, and renders it with a z-buffer so a hole
+  in the roof is a hole in the picture. This found a stair whose treads ate
+  into the corridor beside it and a wardrobe buried to its waist in a floor,
+  neither of which any static check could see. Use it for anything built
+  from parts. `tools/verify/README.md` has the setup.
 
 What **cannot** be verified here is anything that only fails at runtime. Four
 bugs shipped that way; the developer's **Output window** log found each one in
@@ -135,6 +144,17 @@ acute, right and obtuse cases.
 Saving is off until the place is published — `GetDataStore` throws outright in
 an unpublished place. The code detects this at startup and says so once. The
 yellow `[PlayerData]` warnings are expected, not failures.
+
+`Manor.luau` builds a derelict three-floor manor from ~1400 Parts and
+WedgeParts: two storeys of rooms plus an open attic, a switchback stair
+through a double-height hall, a projecting gabled bay, a porch, ten tagged
+hiding places (`CollectionService` tag `HidingSpot`). It is deliberately
+standalone — requires nothing, reads no Config — so it drops into any version
+of the project. `ManorSpawn.server.luau` places it: set `PIVOT` there; it finds
+the ground itself by raycasting the terrain and clears trees from its
+footprint. The house is asymmetric on purpose: a symmetrical plan with a
+centred porch read as a chapel, and it took a projecting bay and a one-sided
+porch to make it read as a house.
 
 ## Conventions
 

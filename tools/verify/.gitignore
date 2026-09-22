@@ -1,0 +1,6 @@
+# Downloaded binaries and generated output. See README.md.
+bin/
+out/
+combined.luau
+parts.tsv
+Manor.luau
