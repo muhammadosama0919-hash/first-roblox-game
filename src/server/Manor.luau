@@ -9,8 +9,8 @@
 
 	Three floors you can walk: two storeys of rooms plus an open attic, joined
 	by a switchback stair through a double-height hall. Every room has at least
-	two ways out, so a chase loops instead of dead-ending, and there are ten
-	places to hide.
+	two ways out, so a chase loops instead of dead-ending, and there are
+	built-in cupboards to hide in.
 
 	Nothing here is a MeshPart. `MeshPart.MeshId` is read-only from a script, so
 	a mesh cannot be built or swapped in Luau at all — it has to be imported by
@@ -67,7 +67,7 @@ local PART_T = 0.8 -- interior partitions
 
 --[[
 	Clapboard courses: a thin board laid across every outside wall piece every
-	2.4 studs. Flat-shaded Roblox walls read as painted card whatever material
+	2.6 studs. Flat-shaded Roblox walls read as painted card whatever material
 	they carry, because nothing on them catches a shadow. These do: each one is
 	a real edge, so the walls pick up lines from the lighting in the same way
 	the reference's weatherboarding does. They are laid on the wall pieces
@@ -122,6 +122,17 @@ local STEP_CENTRE = 20 -- steps off to one side, not on the axis
 local STEP_HALF = 7 -- half the gap left in the railing for them
 local RAIL_TOP = 3.8
 
+-- The porch posts along the front, by X. The pair flanking the steps is what
+-- the lanterns hang from, so the list lives here rather than in the porch.
+local PORCH_POST_XS = {
+	PORCH_X0 + 1.5,
+	0,
+	STEP_CENTRE - STEP_HALF - 1,
+	STEP_CENTRE + STEP_HALF + 1,
+	PORCH_OUT_X - 1.5,
+}
+local STEP_POST_XS = { PORCH_POST_XS[3], PORCH_POST_XS[4] }
+
 local BAY_Z = PORCH_OUT_Z -- the bay front is flush with the porch
 local BAY_PEAK = KNEE_TOP + (BAY_W / 2) * BAY_PITCH
 local BAY_STOP = (RIDGE - BAY_PEAK) / ROOF_FALL -- where its ridge bites the main slope
@@ -141,6 +152,7 @@ local S2_MID = 8 -- attic stair, climbing back toward the front
 
 local DOOR_W = 8
 local DOOR_H = 11
+local FRONT_DOOR_X = 4 -- in the hall, right of the bay
 local INNER_DOOR_W = 7
 local INNER_DOOR_H = 10
 
@@ -163,9 +175,8 @@ local TRIM = Color3.fromRGB(138, 132, 122)
 local TIMBER = Color3.fromRGB(52, 42, 32)
 local SHINGLE = Color3.fromRGB(54, 48, 44)
 local FLOORBOARD = Color3.fromRGB(74, 58, 44)
-local PLASTER = Color3.fromRGB(126, 112, 94)
+local PANEL = Color3.fromRGB(148, 138, 120) -- boarded interior walls, old whitewash
 local LANTERN = Color3.fromRGB(255, 176, 88)
-local WEB = Color3.fromRGB(226, 226, 222)
 
 --[[
 	Weathering. No two boards on an old house are the same shade, and a wall
@@ -222,7 +233,8 @@ type Window = {
 	sill: number,
 	width: number,
 	height: number,
-	style: string, -- "intact" | "broken" | "boarded" | "glow" | "open"
+	style: string, -- "window" | "open" | "door"
+	hinge: number?, -- doors only: which jamb the leaf hangs on, -1 left, 1 right, looking out
 }
 
 type Hole = {
@@ -371,7 +383,8 @@ local function pierced(
 	material: Enum.Material,
 	place: Place,
 	parent: Instance,
-	outward: number?
+	outward: number?,
+	skirtInset: number?
 )
 	local lo = math.min(from, to)
 	local hi = math.max(from, to)
@@ -398,6 +411,53 @@ local function pierced(
 			material,
 			parent
 		)
+
+		-- Skirting along the foot of every wall that stands on a floor, on the
+		-- room side of it. It is the one line that makes a plain wall read as
+		-- the inside of a room rather than the inside of a box. Doorways break
+		-- it for free, because the wall pieces already stop at them.
+		local onFloor = math.abs(y0 - L1) < EPS
+			or math.abs(y0 - L2) < EPS
+			or math.abs(y0 - L3) < EPS
+		-- A wall that runs on through the walls it meets — the side walls run
+		-- the full depth, through the front and back — carries no skirting
+		-- inside them: `skirtInset` pulls it in from the run's ends, or the
+		-- board would come out through the far face as a wooden nub.
+		local inset = skirtInset or 0
+		local sa = math.max(a, lo + inset)
+		local sb = math.min(b, hi - inset)
+		if onFloor and sb - sa > 1 then
+			local faces: { number } = {}
+			if outward ~= nil then
+				table.insert(faces, -outward)
+			else
+				table.insert(faces, -1)
+				table.insert(faces, 1)
+			end
+
+			-- Where two walls meet, their skirtings run into each other. Boards
+			-- along Z are a shade lower than boards along X, so the two never
+			-- share a top face where they cross.
+			local skirtH = if axis == "X" then 1 else 0.96
+			for _, face in faces do
+				local off = face * (thickness / 2 + 0.12)
+				local skirt = newPart(
+					"Skirting",
+					if axis == "X"
+						then Vector3.new(sb - sa, skirtH, 0.24)
+						else Vector3.new(0.24, skirtH, sb - sa),
+					place(
+						if axis == "X"
+							then Vector3.new((sa + sb) / 2, y0 + skirtH / 2, fixed + off)
+							else Vector3.new(fixed + off, y0 + skirtH / 2, (sa + sb) / 2)
+					),
+					TIMBER,
+					Enum.Material.Wood,
+					parent
+				)
+				skirt.CanCollide = false
+			end
+		end
 
 		if outward == nil then
 			return
@@ -547,8 +607,8 @@ local function slabWithHoles(
 end
 
 --[[
-	A flight of stairs between two points, plus the invisible ramp that makes it
-	walkable.
+	A flight of stairs between two points, with a handrail down each side and
+	the invisible ramp that makes it walkable.
 
 	The treads are scenery — they do not collide. What the player actually walks
 	on is a smooth slab at the flight's own angle hidden inside them. Roblox
@@ -558,9 +618,14 @@ end
 	is the standard fix and it costs one part.
 
 	Treads are thicker than the rise between them, so consecutive treads overlap
-	and the flight has no gaps to see through — no separate risers needed. Both
-	axes come from the two endpoints rather than from an angle, so a flight can
-	point anywhere without a sign convention to get wrong.
+	and the flight has no gaps to see through. A low string board down each
+	side hides the sawtooth of their ends; above it a newel post at each end
+	carries a handrail at hand height, with balusters under it. The rail is
+	what keeps a player on the flight. A solid panel did the same job and
+	looked like a wall.
+
+	Both axes come from the two endpoints rather than from an angle, so a flight
+	can point anywhere without a sign convention to get wrong.
 ]]
 local function staircase(
 	name: string,
@@ -586,10 +651,13 @@ local function staircase(
 
 	local treadRun = run / steps
 	local treadRise = delta.Y / steps
-	local treadT = math.max(1.4, treadRise * 2)
+	local treadT = math.max(1.0, treadRise * 1.3)
 
-	-- Level basis for the treads: they sit flat, only the flight is inclined.
+	-- Level basis for the treads and posts, which sit plumb; slope basis for
+	-- everything that runs with the flight.
 	local levelRotation = CFrame.fromMatrix(Vector3.zero, right, Vector3.yAxis, -ahead)
+	local slopeRotation = CFrame.fromMatrix(Vector3.zero, right, up, -forward)
+	local mid = (bottom + top) / 2
 
 	for i = 1, steps do
 		-- The odd tread has rotted through. Only ever a middle one, and the
@@ -600,12 +668,12 @@ local function staircase(
 		end
 
 		local topY = bottom.Y + treadRise * i
-		local mid = bottom + ahead * (treadRun * (i - 0.5))
+		local centre = bottom + ahead * (treadRun * (i - 0.5))
 
 		local tread = newPart(
 			name .. "Tread",
 			Vector3.new(width, treadT, treadRun),
-			place(Vector3.new(mid.X, topY - treadT / 2, mid.Z)) * levelRotation,
+			place(Vector3.new(centre.X, topY - treadT / 2, centre.Z)) * levelRotation,
 			FLOORBOARD,
 			Enum.Material.WoodPlanks,
 			parent
@@ -613,49 +681,99 @@ local function staircase(
 		tread.CanCollide = false
 	end
 
-	-- Dropped half its thickness along its own normal so the ramp's TOP face
-	-- lands exactly on the line between the two endpoints. Centring it there
-	-- instead would raise a lip at the foot of the flight.
-	local rampT = 1.6
-	local slopeRotation = CFrame.fromMatrix(Vector3.zero, right, up, -forward)
-	local rampCentre = (bottom + top) / 2 - up * (rampT / 2)
-
-	local ramp = newPart(
+	--[[
+		The ramp's top face is the line through the tread backs: the one
+		straight line that meets the floor at the first tread's front edge and
+		the landing at the last tread's back with no lip at either end, and
+		stays inside the treads the whole way, so it never shows. A foot on it
+		sinks into each nosing by up to one rise, which is far less visible
+		than a slab standing proud of the steps was. Thin enough that its
+		underside stays inside the string boards too; collision does not care.
+	]]
+	local rampT = 0.85
+	newPart(
 		name .. "Ramp",
-		Vector3.new(width, rampT, delta.Magnitude + treadRun),
-		place(rampCentre) * slopeRotation,
+		Vector3.new(width, rampT, delta.Magnitude),
+		place(mid - up * (rampT / 2)) * slopeRotation,
 		FLOORBOARD,
 		Enum.Material.WoodPlanks,
 		parent
 	)
-	ramp.CanQuery = false
 
-	-- A stringer down each side, hung just outside the treads so the full
-	-- width stays walkable. It closes the open edge of the flight and stops a
-	-- player walking off it sideways into the stairwell.
+	local railH = 3.6
+	local balusters = math.max(2, math.floor(run / 2.2))
+
 	for _, side in { -1, 1 } do
+		local edge = right * (side * (width / 2 + 0.3))
+
+		-- String board: hides the tread ends, and is the line the eye reads
+		-- the flight by.
 		newPart(
-			name .. "Stringer",
-			Vector3.new(0.6, 5, delta.Magnitude + treadRun),
-			place((bottom + top) / 2 + right * (side * (width / 2 + 0.3)) + Vector3.new(0, 2, 0))
-				* slopeRotation,
+			name .. "String",
+			Vector3.new(0.4, 1.2, delta.Magnitude + treadRun),
+			place(mid + edge - up * 0.3) * slopeRotation,
 			TIMBER,
 			Enum.Material.Wood,
 			parent
 		)
+
+		-- Newel posts, footed most of a stud into whatever the flight stands on
+		-- — not a whole one, or the post's underside would lie on the ceiling
+		-- of the room below and flicker there.
+		local postH = railH + 1.6
+		for _, post in { { at = bottom, back = -0.4 }, { at = top, back = 0.4 } } do
+			newPart(
+				name .. "Newel",
+				Vector3.new(0.8, postH, 0.8),
+				place(post.at + edge + ahead * post.back + Vector3.new(0, postH / 2 - 0.9, 0))
+					* levelRotation,
+				TIMBER,
+				Enum.Material.Wood,
+				parent
+			)
+		end
+
+		-- The rail, parallel to the flight at hand height, run into the posts.
+		newPart(
+			name .. "Rail",
+			Vector3.new(0.5, 0.4, delta.Magnitude + 0.8),
+			place(mid + edge + Vector3.new(0, railH, 0)) * slopeRotation,
+			TIMBER,
+			Enum.Material.Wood,
+			parent
+		)
+
+		for k = 1, balusters - 1 do
+			-- A few gone, as on the porch: same house, same neglect.
+			if weatherRng:NextNumber() < 0.15 then
+				continue
+			end
+
+			local foot = bottom + delta * (k / balusters)
+			local baluster = newPart(
+				name .. "Baluster",
+				Vector3.new(0.25, railH, 0.25),
+				place(foot + edge + Vector3.new(0, railH / 2, 0)) * levelRotation,
+				TIMBER,
+				Enum.Material.Wood,
+				parent
+			)
+			baluster.CanCollide = false
+		end
 	end
 end
 
 --[[
-	A window: a frame, mullions, and in some the shards of glass still clinging
-	to the corners or a cobweb across one. No panes anywhere. Every window in the house is open, so a
-	player inside can look out through any of them, and anything outside can
-	look in.
+	A window: a cased frame with two mullions and nothing in it. Every window
+	in the house is open, so a player inside can look out through any of them,
+	and anything outside can look in.
 
 	`frame` looks out of the wall, so every piece is placed in that frame's own
 	space and the same call works on all four elevations with no per-wall
-	special case. Style "open" is the bare cased opening, used for the way
-	through into the bay; "door" hangs a door in it.
+	special case. Style "open" is the bare cased opening, used for doorways
+	and the way through into the bay; "door" hangs a door in it. Neither gets a
+	sill: a sill at floor level is a lip to trip on, and at doorways the floor
+	is the threshold.
 ]]
 local function window(
 	frame: CFrame,
@@ -663,30 +781,39 @@ local function window(
 	height: number,
 	style: string,
 	thickness: number,
-	parent: Instance
+	parent: Instance,
+	hinge: number?
 )
 	local jamb = 0.45
 	local d = thickness + 0.3
+
+	-- The frame sits in the wall's end faces around the opening, and a face
+	-- that shares a plane with another flickers in the engine. Each piece is
+	-- nudged a hair into the opening, so its inner face stands proud of the
+	-- wall's edge it covers instead of lying on it.
+	local nudge = 0.02
 
 	local function piece(name: string, size: Vector3, offset: Vector3): Part
 		return newPart(name, size, frame * CFrame.new(offset), TRIM, Enum.Material.Wood, parent)
 	end
 
-	piece(
-		"Sill",
-		Vector3.new(width + jamb * 2, jamb, d + 0.6),
-		Vector3.new(0, -height / 2 - jamb / 2, 0)
-	)
+	if style == "window" then
+		piece(
+			"Sill",
+			Vector3.new(width + jamb * 2, jamb, d + 0.6),
+			Vector3.new(0, -height / 2 - jamb / 2 + nudge, 0)
+		)
+	end
 	piece(
 		"Lintel",
 		Vector3.new(width + jamb * 2, jamb, d + 0.6),
-		Vector3.new(0, height / 2 + jamb / 2, 0)
+		Vector3.new(0, height / 2 + jamb / 2 - nudge, 0)
 	)
 	for _, side in { -1, 1 } do
 		piece(
 			"Jamb",
 			Vector3.new(jamb, height, d),
-			Vector3.new(side * (width / 2 + jamb / 2), 0, 0)
+			Vector3.new(side * (width / 2 + jamb / 2 - nudge), 0, 0)
 		)
 	end
 
@@ -698,17 +825,22 @@ local function window(
 		-- A real door, hung on one jamb and swung most of the way open into the
 		-- house. A closed door would need a prompt and a swing to be passable;
 		-- an open one costs one part and reads as "somebody left in a hurry",
-		-- which is the right note anyway.
+		-- which is the right note anyway. The roll is the door hanging off its
+		-- top hinge: the far edge has dropped, and the bottom corner has gone
+		-- into the floor.
+		-- `hinge` picks the jamb, so a door can swing toward whichever side of
+		-- the room is clear: the back door opens away from the cupboard under
+		-- the stair. Every sign below follows from it, including the roll,
+		-- which has to drop the far edge whichever way the leaf faces.
+		local h = hinge or -1
 		local leafW = width - 0.4
 		local leaf = newPart(
 			"Door",
 			Vector3.new(leafW, height - 0.3, 0.4),
-			-- The roll is the door hanging off its top hinge: the far edge has
-			-- dropped, and the bottom corner has gone into the floor.
 			frame
-				* CFrame.new(-width / 2 + 0.2, 0, 0)
-				* CFrame.Angles(0, math.rad(-105), math.rad(-3))
-				* CFrame.new(leafW / 2, 0, 0),
+				* CFrame.new(h * (width / 2 - 0.2), 0, 0)
+				* CFrame.Angles(0, h * math.rad(105), h * math.rad(3))
+				* CFrame.new(-h * leafW / 2, 0, 0),
 			TIMBER,
 			Enum.Material.Wood,
 			parent
@@ -719,7 +851,7 @@ local function window(
 		local knob = newPart(
 			"Knob",
 			Vector3.new(0.5, 0.5, 0.5),
-			leaf.CFrame * CFrame.new(leafW / 2 - 1, 0, -0.35),
+			leaf.CFrame * CFrame.new(-h * (leafW / 2 - 1), 0, -0.35),
 			Color3.fromRGB(160, 140, 90),
 			Enum.Material.Metal,
 			parent
@@ -730,74 +862,15 @@ local function window(
 
 	-- Two thin bars are all it takes for a rectangle to read as a window rather
 	-- than as a hole in the wall.
+	-- The crossbar is a shade thinner than the upright, so where they cross no
+	-- two faces share a plane.
 	for _, bar in
 		{
 			piece("Mullion", Vector3.new(0.3, height, 0.3), Vector3.zero),
-			piece("Mullion", Vector3.new(width, 0.3, 0.3), Vector3.zero),
+			piece("Mullion", Vector3.new(width, 0.28, 0.28), Vector3.zero),
 		}
 	do
 		bar.CanCollide = false
-	end
-
-	if style == "cobweb" then
-		-- A web across one top corner, just inside the opening. Translucent
-		-- and small enough that the view out is still the view out.
-		local webs = triangle(
-			"Cobweb",
-			(frame * CFrame.new(-width / 2 + 0.2, height / 2 - 0.2, 0.3)).Position,
-			(frame * CFrame.new(-width / 2 + 0.2 + width * 0.5, height / 2 - 0.2, 0.3)).Position,
-			(frame * CFrame.new(-width / 2 + 0.2, height / 2 - 0.2 - height * 0.55, 0.3)).Position,
-			0.08,
-			WEB,
-			Enum.Material.Fabric,
-			parent
-		)
-		for _, web in webs do
-			web.Transparency = 0.6
-			web.CanCollide = false
-			web.CastShadow = false
-		end
-		return
-	end
-
-	if style == "shards" then
-		-- Glass left clinging in the corners, built from corner points so the
-		-- jagged edge is real geometry rather than a texture. Never enough to
-		-- block the view.
-		local corners = {
-			{
-				Vector3.new(-width / 2, height / 2, 0),
-				Vector3.new(-width / 2 + width * 0.42, height / 2, 0),
-				Vector3.new(-width / 2, height / 2 - height * 0.38, 0),
-			},
-			{
-				Vector3.new(width / 2, height / 2, 0),
-				Vector3.new(width / 2 - width * 0.3, height / 2, 0),
-				Vector3.new(width / 2, height / 2 - height * 0.5, 0),
-			},
-			{
-				Vector3.new(width / 2, -height / 2, 0),
-				Vector3.new(width / 2 - width * 0.35, -height / 2, 0),
-				Vector3.new(width / 2, -height / 2 + height * 0.3, 0),
-			},
-		}
-
-		for _, corner in corners do
-			local shards = triangle(
-				"Shard",
-				(frame * CFrame.new(corner[1])).Position,
-				(frame * CFrame.new(corner[2])).Position,
-				(frame * CFrame.new(corner[3])).Position,
-				0.15,
-				Color3.fromRGB(196, 206, 202),
-				Enum.Material.Glass,
-				parent
-			)
-			for _, shard in shards do
-				shard.CanCollide = false
-				shard.Transparency = 0.35
-			end
-		end
 	end
 end
 
@@ -816,18 +889,6 @@ local function openingsFor(windows: { Window }): { Opening }
 		})
 	end
 	return openings
-end
-
---[[
-	Pick a window's condition from a seeded generator.
-
-	Seeded rather than random, so every server builds the same ruin: a player
-	who learns which window still has glass in it is right about it on their
-	next join, and a screenshot of a bug is reproducible.
-]]
-local function styleFor(rng: Random): string
-	local roll = rng:NextNumber()
-	return if roll < 0.35 then "shards" elseif roll < 0.55 then "cobweb" else "window"
 end
 
 --[[
@@ -853,18 +914,19 @@ local function foundation(rng: Random, place: Place, parent: Instance)
 		-- The base course is widest, so the house sits on a plinth rather than
 		-- balancing on a wall exactly as wide as itself.
 		local out = 1.2 * (1 - i / courses) + 0.4
+		-- Courses lap a little so no seam opens between them, and the top one
+		-- stops inside the ground-floor slab: a footing that tops out even a
+		-- hair above the floor turns the whole ground floor to stone.
+		local bottom = GROUND + courseH * i - 0.05
+		local top = math.min(GROUND + courseH * (i + 1), L1 - 0.3)
 		for _, rect in footprints do
 			newPart(
 				"Footing",
-				Vector3.new(
-					rect.x1 - rect.x0 + out * 2,
-					courseH + 0.05,
-					rect.z1 - rect.z0 + out * 2
-				),
+				Vector3.new(rect.x1 - rect.x0 + out * 2, top - bottom, rect.z1 - rect.z0 + out * 2),
 				place(
 					Vector3.new(
 						(rect.x0 + rect.x1) / 2,
-						GROUND + courseH * i + courseH / 2,
+						(top + bottom) / 2,
 						(rect.z0 + rect.z1) / 2
 					)
 				),
@@ -875,29 +937,31 @@ local function foundation(rng: Random, place: Place, parent: Instance)
 		end
 	end
 
-	for _ = 1, 90 do
-		local edge = rng:NextInteger(1, 4)
+	-- A few stones fallen out of the base and lying at its foot, never at the
+	-- front where the porch and bay are. Not many: a ring of loose blocks
+	-- round a house reads as rubble in the way of the door, not as age.
+	for _ = 1, 22 do
+		local edge = rng:NextInteger(2, 4)
 		local along = rng:NextNumber(-1, 1)
-		local size = rng:NextNumber(1.6, 3.4)
-		local y = rng:NextNumber(GROUND + 0.6, -1.2)
+		local size = rng:NextNumber(1.0, 2.0)
+		local out = 1.4 + rng:NextNumber(0, 2.2)
 
 		local position
-		if edge <= 2 then
-			local side = if edge == 1 then 1 else -1
-			position = Vector3.new(along * (HALF_W - 1), y, side * (HALF_D + 0.8))
+		if edge == 2 then
+			position = Vector3.new(along * (HALF_W - 2), GROUND + size * 0.3, -(HALF_D + out))
 		else
 			local side = if edge == 3 then 1 else -1
-			position = Vector3.new(side * (HALF_W + 0.8), y, along * (HALF_D - 1))
+			position = Vector3.new(side * (HALF_W + out), GROUND + size * 0.3, along * (HALF_D - 2))
 		end
 
 		local stone = newPart(
 			"Rubble",
-			Vector3.new(size, size * rng:NextNumber(0.55, 0.9), size * rng:NextNumber(0.7, 1.1)),
+			Vector3.new(size, size * rng:NextNumber(0.5, 0.75), size * rng:NextNumber(0.7, 1.1)),
 			place(position)
 				* CFrame.Angles(
-					rng:NextNumber(-0.2, 0.2),
+					rng:NextNumber(-0.15, 0.15),
 					rng:NextNumber(0, math.pi * 2),
-					rng:NextNumber(-0.2, 0.2)
+					rng:NextNumber(-0.15, 0.15)
 				),
 			if rng:NextNumber() < 0.5 then STONE else STONE_DARK,
 			Enum.Material.Rock,
@@ -926,7 +990,8 @@ local function elevation(
 	upper: { Window },
 	attic: { Window },
 	place: Place,
-	parent: Instance
+	parent: Instance,
+	skirtInset: number?
 )
 	local bands: { { bottom: number, top: number, windows: { Window } } } = {
 		{ bottom = L1, top = L1 + STOREY, windows = lower },
@@ -953,7 +1018,8 @@ local function elevation(
 			Enum.Material.WoodPlanks,
 			place,
 			parent,
-			sign
+			sign,
+			skirtInset
 		)
 
 		for _, w in band.windows do
@@ -967,7 +1033,8 @@ local function elevation(
 				w.height,
 				w.style,
 				WALL_T,
-				parent
+				parent,
+				w.hinge
 			)
 		end
 	end
@@ -1025,7 +1092,8 @@ end
 
 	Returns how far out from the ridge its own ridge bites into the main slope,
 	so the caller knows where to stop the main roof and leave it a hole to sit
-	in. Every Z below is a distance out from the ridge; `side` is applied once,
+	in, and how far out the valley between the two roofs reaches the cut's
+	edge, so the caller can carry the main roof out to it. Every Z below is a distance out from the ridge; `side` is applied once,
 	at the end, so none of this arithmetic has a sign in it.
 ]]
 local function dormer(
@@ -1036,7 +1104,7 @@ local function dormer(
 	rng: Random,
 	place: Place,
 	parent: Instance
-): number
+): (number, number)
 	local eave = KNEE_TOP + wallH
 	local peak = eave + width / 2 -- 45 degrees, matching the reference's steepness
 	local stop = (RIDGE - peak) / ROOF_FALL
@@ -1046,8 +1114,13 @@ local function dormer(
 	local outZ = HALF_D + EAVE
 	local depth = outZ - backZ
 	local midZ = side * (backZ + outZ) / 2
+	-- The cheeks stop at the back of the face, which runs the full width past
+	-- them: only the roof runs on to the eave line. Run to the face's front,
+	-- cheek and face would share the corner's outer plane and flicker.
+	local cheekDepth = HALF_D - WALL_T - backZ
+	local cheekMidZ = side * (backZ + HALF_D - WALL_T) / 2
 
-	local style = styleFor(rng)
+	local style = "window"
 	local winW = math.min(width * 0.42, 9)
 	local winH = math.min(wallH - 2.5, 7)
 	local winSill = KNEE_TOP + (wallH - winH) / 2
@@ -1096,17 +1169,20 @@ local function dormer(
 	for _, edge in { -1, 1 } do
 		newPart(
 			"DormerCheek",
-			Vector3.new(WALL_T, wallH, depth),
-			place(Vector3.new(cx + edge * (width / 2 - WALL_T / 2), KNEE_TOP + wallH / 2, midZ)),
+			Vector3.new(WALL_T, wallH, cheekDepth),
+			place(
+				Vector3.new(cx + edge * (width / 2 - WALL_T / 2), KNEE_TOP + wallH / 2, cheekMidZ)
+			),
 			BOARD,
 			Enum.Material.WoodPlanks,
 			parent
 		)
 	end
 
-	-- Two slopes off the dormer ridge at 45 degrees, run long enough to lap over
-	-- both the ridge and the main slope's cut edge. A lap is invisible; a gap
-	-- lets the sky into the attic.
+	-- Two slopes off the dormer ridge at 45 degrees. Each is two studs longer
+	-- than its run and shifted down its own slope by one, so its top end lands
+	-- exactly on the ridge and the extra hangs at the eave. A lap over the main
+	-- slope's cut edge is invisible; a gap lets the sky into the attic.
 	local slope = math.rad(45)
 	local slabLen = (width / 2) / math.cos(slope) + 2
 
@@ -1114,15 +1190,20 @@ local function dormer(
 		newPart(
 			"DormerRoof",
 			Vector3.new(slabLen, ROOF_T, depth + 2),
-			place(Vector3.new(cx + edge * width / 4, (peak + eave) / 2 + ROOF_T / 2, midZ))
-				* CFrame.Angles(0, 0, -edge * slope),
+			place(
+				Vector3.new(
+					cx + edge * (width / 4 + math.cos(slope)),
+					(peak + eave) / 2 + ROOF_T / 2 - math.sin(slope),
+					midZ
+				)
+			) * CFrame.Angles(0, 0, -edge * slope),
 			SHINGLE,
 			Enum.Material.RoofShingles,
 			parent
 		)
 	end
 
-	return stop
+	return stop, (RIDGE - eave) / ROOF_FALL
 end
 
 --[[
@@ -1143,7 +1224,7 @@ end
 ]]
 local function frontBay(rng: Random, place: Place, parent: Instance)
 	local function sash(at: number, sill: number, width: number, height: number): Window
-		return { at = at, sill = sill, width = width, height = height, style = styleFor(rng) }
+		return { at = at, sill = sill, width = width, height = height, style = "window" }
 	end
 
 	-- The bay front is the widest glazing in the house, which is what makes it
@@ -1159,7 +1240,8 @@ local function frontBay(rng: Random, place: Place, parent: Instance)
 		{ sash(BAY_MID - 3, L2 + 4, 5, 7), sash(BAY_MID + 4, L2 + 4, 5, 7) },
 		{ sash(BAY_MID, L3 + 1, 4, 3) },
 		place,
-		parent
+		parent,
+		WALL_T -- runs through both cheeks; no skirting inside them
 	)
 
 	for _, side in { -1, 1 } do
@@ -1169,7 +1251,9 @@ local function frontBay(rng: Random, place: Place, parent: Instance)
 			"Z",
 			face,
 			HALF_D,
-			BAY_Z,
+			-- To the back of the front wall, not its face: run to the corner,
+			-- the two walls would share the corner's faces and flicker there.
+			BAY_Z - WALL_T,
 			Vector3.new(side, 0, 0),
 			{ sash(BAY_Z - 4.5, L1 + 4, 4, 7) },
 			{ sash(BAY_Z - 4.5, L2 + 4, 4, 7) },
@@ -1180,14 +1264,17 @@ local function frontBay(rng: Random, place: Place, parent: Instance)
 	end
 
 	for _, y in { L1, L2, L3 } do
+		-- Pulled inside the bay walls above the ground floor, as the main slabs
+		-- are, and starting where the main slab ends on that floor.
+		local out = if y == L1 then 0 else -WALL_T / 2
 		slabWithHoles(
 			"BayFloor",
 			y,
 			SLAB,
-			BAY_X0,
-			BAY_X1,
-			HALF_D,
-			BAY_Z,
+			BAY_X0 - out,
+			BAY_X1 + out,
+			HALF_D + out,
+			BAY_Z + out,
 			{},
 			FLOORBOARD,
 			Enum.Material.WoodPlanks,
@@ -1215,7 +1302,7 @@ local function frontBay(rng: Random, place: Place, parent: Instance)
 	newPart(
 		"BayRidge",
 		Vector3.new(2.2, 1.2, outZ - backZ),
-		place(Vector3.new(BAY_MID, BAY_PEAK + 0.5, (backZ + outZ) / 2)),
+		place(Vector3.new(BAY_MID, BAY_PEAK + 1.0, (backZ + outZ) / 2)),
 		SHINGLE,
 		Enum.Material.RoofShingles,
 		parent
@@ -1227,8 +1314,8 @@ local function frontBay(rng: Random, place: Place, parent: Instance)
 			Vector3.new(slabLen, ROOF_T, outZ - backZ),
 			place(
 				Vector3.new(
-					BAY_MID + side * BAY_W / 4,
-					(BAY_PEAK + KNEE_TOP) / 2 + ROOF_T / 2,
+					BAY_MID + side * (BAY_W / 4 + 1.5 * math.cos(slope)),
+					(BAY_PEAK + KNEE_TOP) / 2 + ROOF_T / 2 - 1.5 * math.sin(slope),
 					(backZ + outZ) / 2
 				)
 			) * CFrame.Angles(0, 0, -side * slope),
@@ -1269,10 +1356,12 @@ local function railing(name: string, deck: number, run: Run, place: Place, paren
 
 	local mid = (run.from + run.to) / 2
 
+	-- Runs along Z are a shade slimmer than runs along X, so where two meet
+	-- at a corner the one sits inside the other instead of sharing its faces.
 	for _, height in { 1.1, RAIL_TOP } do
 		newPart(
 			name .. "Rail",
-			if horizontal then Vector3.new(length, 0.35, 0.5) else Vector3.new(0.5, 0.35, length),
+			if horizontal then Vector3.new(length, 0.35, 0.5) else Vector3.new(0.5, 0.33, length),
 			place(
 				if horizontal
 					then Vector3.new(mid, deck + height, run.fixed)
@@ -1325,6 +1414,8 @@ end
 	it reading as heavy.
 ]]
 local function verandah(place: Place, parent: Instance)
+	-- The decks start at the walls' outer face, where the ground-floor slab
+	-- ends: overlapping it, their tops would share its plane and flicker.
 	local frontRect: Hole = { x0 = PORCH_X0, x1 = PORCH_OUT_X, z0 = HALF_D, z1 = PORCH_OUT_Z }
 	local returnRect: Hole = { x0 = HALF_W, x1 = PORCH_OUT_X, z0 = PORCH_RETURN_Z, z1 = HALF_D }
 
@@ -1441,6 +1532,20 @@ local function verandah(place: Place, parent: Instance)
 		parent
 	)
 
+	-- Where the front roof meets the return, the return has already fallen
+	-- while the front's back edge is still at the wall. A triangle in the
+	-- plane of that edge closes the notch, from its three corners.
+	triangle(
+		"PorchHip",
+		place(Vector3.new(HALF_W, roofHigh, HALF_D)).Position,
+		place(Vector3.new(HALF_W + roofRun, roofHigh, HALF_D)).Position,
+		place(Vector3.new(HALF_W + roofRun, roofLow, HALF_D)).Position,
+		0.8,
+		SHINGLE,
+		Enum.Material.RoofShingles,
+		parent
+	)
+
 	-- Fascia along the two outside edges: the line the eye follows to read the
 	-- porch as a roof rather than as a slab.
 	newPart(
@@ -1461,15 +1566,7 @@ local function verandah(place: Place, parent: Instance)
 	)
 
 	local posts: { Vector3 } = {}
-	for _, x in
-		{
-			PORCH_X0 + 1.5,
-			0,
-			STEP_CENTRE - STEP_HALF - 1,
-			STEP_CENTRE + STEP_HALF + 1,
-			PORCH_OUT_X - 1.5,
-		}
-	do
+	for _, x in PORCH_POST_XS do
 		table.insert(posts, Vector3.new(x, 0, PORCH_OUT_Z - 1.5))
 	end
 	table.insert(posts, Vector3.new(PORCH_OUT_X - 1.5, 0, PORCH_RETURN_Z + 1.5))
@@ -1611,8 +1708,13 @@ local function trim(front: { Gable }, back: { Gable }, place: Place, parent: Ins
 			newPart(
 				"Rake",
 				Vector3.new(0.6, 1.5, rakeLen),
-				place(Vector3.new(side * edge, (RIDGE + KNEE_TOP) / 2, slope * ROOF_RUN / 2))
-					* CFrame.Angles(slope * ROOF_PITCH, 0, 0),
+				-- Dropped half its height along the roof's normal so its top edge
+				-- is flush with the shingles rather than standing above them.
+				place(
+					Vector3.new(side * edge, (RIDGE + KNEE_TOP) / 2, slope * ROOF_RUN / 2)
+						- Vector3.new(0, math.cos(ROOF_PITCH), slope * math.sin(ROOF_PITCH))
+							* 0.75
+				) * CFrame.Angles(slope * ROOF_PITCH, 0, 0),
 				TRIM,
 				Enum.Material.Wood,
 				parent
@@ -1621,8 +1723,11 @@ local function trim(front: { Gable }, back: { Gable }, place: Place, parent: Ins
 	end
 
 	-- And down the bay's gable.
-	local bayHalf = BAY_W / 2 + 2
+	-- The bay roof slabs reach three studs down their slope past the bay's
+	-- sides; the rake stops a shade short of that, or its end hangs in the
+	-- air past the eave.
 	local baySlope = math.atan2(BAY_PITCH * BAY_W / 2, BAY_W / 2)
+	local bayHalf = BAY_W / 2 + 3 * math.cos(baySlope) - 0.2
 	local bayRakeLen = bayHalf / math.cos(baySlope)
 	local bayLow = BAY_PEAK - bayHalf * BAY_PITCH
 	for _, e in { -1, 1 } do
@@ -1648,10 +1753,13 @@ local function backStoop(place: Place, parent: Instance)
 	local halfW = 11
 	local outZ = -HALF_D - 9
 
+	-- From the wall's outer face, where the ground-floor slab ends, for the
+	-- same reason the porch decks do.
+	local inZ = -HALF_D
 	newPart(
 		"StoopDeck",
-		Vector3.new(halfW * 2, SLAB, 9),
-		place(Vector3.new(0, L1 - SLAB / 2, (-HALF_D + outZ) / 2)),
+		Vector3.new(halfW * 2, SLAB, inZ - outZ),
+		place(Vector3.new(0, L1 - SLAB / 2, (inZ + outZ) / 2)),
 		FLOORBOARD,
 		Enum.Material.WoodPlanks,
 		parent
@@ -1660,8 +1768,8 @@ local function backStoop(place: Place, parent: Instance)
 	for _, side in { -1, 1 } do
 		newPart(
 			"StoopPier",
-			Vector3.new(3, FOUND_H + 1, 3),
-			place(Vector3.new(side * (halfW - 2), GROUND + (FOUND_H + 1) / 2 - SLAB, outZ + 2)),
+			Vector3.new(3, FOUND_H, 3),
+			place(Vector3.new(side * (halfW - 2), GROUND + FOUND_H / 2 - SLAB, outZ + 2)),
 			STONE,
 			Enum.Material.Cobblestone,
 			parent
@@ -1680,19 +1788,15 @@ local function backStoop(place: Place, parent: Instance)
 end
 
 --[[
-	Cobwebs and the boards that have slipped off the walls.
+	The boards that have slipped off the walls.
 
-	All of it is non-collidable and none of it carries the layout, so it can be
-	turned down to nothing if part count ever matters. It is also the only thing
-	standing between flat brown walls and something that looks deliberately
-	derelict rather than merely unfinished.
+	Non-collidable, and none of it carries the layout, so it can be turned down
+	to nothing if part count ever matters. Only a few: a wall bristling with
+	planks reads as a pile of parts, not as age. Never on the front, where they
+	would hang in the porch and across the bay.
 ]]
 local function decay(rng: Random, place: Place, parent: Instance)
-	-- Slipped boards hanging off the face. Cheap, and the eye reads a broken
-	-- line on an otherwise flat wall as damage. Never on the front: there they
-	-- would hang in the porch and across the bay, where a board in mid-air
-	-- reads as a mistake rather than as decay.
-	for _ = 1, 44 do
+	for _ = 1, 14 do
 		local onX = rng:NextNumber() < 0.6
 		local side = if rng:NextNumber() < 0.5 then 1 else -1
 		if not onX then
@@ -1700,8 +1804,8 @@ local function decay(rng: Random, place: Place, parent: Instance)
 		end
 		local along = rng:NextNumber(-0.85, 0.85)
 		local y = rng:NextNumber(2, KNEE_TOP - 2)
-		local length = rng:NextNumber(5, 12)
-		local tilt = rng:NextNumber(-0.25, 0.25)
+		local length = rng:NextNumber(4, 9)
+		local tilt = rng:NextNumber(-0.12, 0.12)
 
 		local position = if onX
 			then Vector3.new(side * (HALF_W + 0.3), y, along * (HALF_D - 4))
@@ -1709,7 +1813,7 @@ local function decay(rng: Random, place: Place, parent: Instance)
 
 		local board = newPart(
 			"LooseBoard",
-			if onX then Vector3.new(0.4, 1.4, length) else Vector3.new(length, 1.4, 0.4),
+			if onX then Vector3.new(0.4, 1.2, length) else Vector3.new(length, 1.2, 0.4),
 			place(position) * CFrame.Angles(if onX then tilt else 0, 0, if onX then 0 else tilt),
 			if rng:NextNumber() < 0.5 then BOARD_DARK else BOARD_PALE,
 			Enum.Material.WoodPlanks,
@@ -1717,101 +1821,88 @@ local function decay(rng: Random, place: Place, parent: Instance)
 		)
 		board.CanCollide = false
 	end
-
-	-- Cobwebs strung across the porch corners, built from their three points so
-	-- each one actually spans the corner it is in.
-	local corners: { { at: Vector3, inward: number } } = {
-		{ at = Vector3.new(PORCH_X0 + 1.5, L1, PORCH_OUT_Z - 1.5), inward = 1 },
-		{ at = Vector3.new(PORCH_OUT_X - 1.5, L1, PORCH_OUT_Z - 1.5), inward = -1 },
-	}
-
-	for _, corner in corners do
-		local top = corner.at + Vector3.new(0, STOREY - 3, 0)
-		local reach = rng:NextNumber(6, 11)
-
-		local webs = triangle(
-			"Cobweb",
-			place(top).Position,
-			place(top + Vector3.new(corner.inward * reach, 0, 0)).Position,
-			place(top + Vector3.new(0, -reach * 0.8, 0)).Position,
-			0.08,
-			WEB,
-			Enum.Material.Fabric,
-			parent
-		)
-
-		for _, web in webs do
-			web.Transparency = 0.62
-			web.CanCollide = false
-			web.CastShadow = false
-		end
-	end
 end
 
+type CupboardWall = { axis: string, fixed: number, from: number, to: number, door: number? }
+
 --[[
-	A cupboard you can stand inside.
+	A built-in cupboard: the walls that close off a corner of a room or the
+	space under a flight, a doorway in one of them, and an invisible tagged
+	volume inside for whatever hunts the players to find.
 
-	Three sides and a lid with the front left open, sized so a character fits
-	with the doors shut behind them. `floorAt` is the floor it stands on rather
-	than its middle, because every call site knows which storey it is furnishing
-	and none of them want to add half a height to get there.
-
-	Tagged as well as named, so whatever hunts the players can ask
-	CollectionService where the hiding places are instead of hard-coding this
-	file's layout.
+	Walls rather than a box, because a box standing in a room is furniture and
+	a cupboard is a room. The doorway is narrow and dark on purpose — it should
+	read as somewhere to get into, not as another way through.
 ]]
-local function wardrobe(
-	floorAt: Vector3,
-	facing: Vector3,
-	size: Vector3,
+local function cupboard(
+	name: string,
+	level: number,
+	height: number,
+	walls: { CupboardWall },
+	inside: Vector3,
+	insideSize: Vector3,
 	floor: number,
 	place: Place,
 	parent: Instance
 ): HidingSpot
-	local w, h, d = size.X, size.Y, size.Z
-	local frame = place(floorAt + Vector3.new(0, h / 2, 0)) * CFrame.new(Vector3.zero, facing)
+	local doorW = 3.5
+	local doorH = math.min(height - 0.5, 9)
 
-	local function piece(name: string, pieceSize: Vector3, offset: Vector3, collide: boolean): Part
-		local part =
-			newPart(name, pieceSize, frame * CFrame.new(offset), TIMBER, Enum.Material.Wood, parent)
-		part.CanCollide = collide
-		return part
+	for _, wall in walls do
+		local openings: { Opening } = {}
+		if wall.door then
+			table.insert(
+				openings,
+				{ at = wall.door, width = doorW, sill = level, head = level + doorH }
+			)
+		end
+
+		pierced(
+			name .. "Wall",
+			wall.axis,
+			wall.fixed,
+			wall.from,
+			wall.to,
+			level,
+			level + height,
+			PART_T,
+			openings,
+			PANEL,
+			Enum.Material.WoodPlanks,
+			place,
+			parent
+		)
+
+		if wall.door then
+			local centre = if wall.axis == "Z"
+				then Vector3.new(wall.fixed, level + doorH / 2, wall.door)
+				else Vector3.new(wall.door, level + doorH / 2, wall.fixed)
+			local outward = if wall.axis == "Z" then Vector3.new(1, 0, 0) else Vector3.new(0, 0, 1)
+			window(
+				place(centre) * CFrame.new(Vector3.zero, outward),
+				doorW,
+				doorH,
+				"open",
+				PART_T,
+				parent
+			)
+		end
 	end
 
-	piece("WardrobeBack", Vector3.new(w, h, 0.6), Vector3.new(0, 0, d / 2), true)
-	piece("WardrobeSide", Vector3.new(0.6, h, d), Vector3.new(-w / 2, 0, 0), true)
-	piece("WardrobeSide", Vector3.new(0.6, h, d), Vector3.new(w / 2, 0, 0), true)
-	piece("WardrobeTop", Vector3.new(w, 0.6, d), Vector3.new(0, h / 2, 0), true)
-
-	-- One door shut, one swung open: the shut half is what makes the gap read
-	-- as somewhere to get into rather than as an alcove.
-	local shut = piece(
-		"WardrobeDoor",
-		Vector3.new(w / 2, h - 0.6, 0.4),
-		Vector3.new(w / 4, 0, -d / 2),
-		false
-	)
-	shut.Color = BOARD_DARK
-
-	local ajar = newPart(
-		"WardrobeDoor",
-		Vector3.new(w / 2, h - 0.6, 0.4),
-		frame
-			* CFrame.new(-w / 2, 0, -d / 2)
-			* CFrame.Angles(0, math.rad(70), 0)
-			* CFrame.new(w / 4, 0, 0),
-		BOARD_DARK,
-		Enum.Material.Wood,
+	local marker = newPart(
+		name .. "HidingVolume",
+		insideSize,
+		place(inside + Vector3.new(0, insideSize.Y / 2, 0)),
+		TIMBER,
+		Enum.Material.Plastic,
 		parent
 	)
-	ajar.CanCollide = false
-
-	local marker = piece("HidingVolume", Vector3.new(w - 1.6, h - 1, d - 1.2), Vector3.zero, false)
 	marker.Transparency = 1
+	marker.CanCollide = false
 	marker.CanQuery = false
 	CollectionService:AddTag(marker, "HidingSpot")
 
-	return { part = marker, kind = "wardrobe", floor = floor }
+	return { part = marker, kind = "cupboard", floor = floor }
 end
 
 --[[
@@ -1840,10 +1931,21 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 	dressing.Name = "Dressing"
 	dressing.Parent = model
 
-	-- The one place the pivot is applied. Everything else is house-local, so no
-	-- piece of the layout arithmetic has to know the house can be rotated.
+	--[[
+		The one place the pivot is applied. Everything else is house-local, so no
+		piece of the layout arithmetic has to know the house can be rotated.
+
+		Two things are folded in here so the pivot means what a caller expects.
+		The pivot sits on the ground, so the house's own ground line — GROUND,
+		FOUND_H below its floor — is lifted onto it. And the pivot's LookVector
+		is the way the house faces, while house-local +Z is the front, so the
+		local frame is turned half a turn. The walkability check and the model
+		export both build against a pivot chosen to undo exactly this.
+	]]
 	local function place(offset: Vector3): CFrame
-		return pivot * CFrame.new(offset)
+		return pivot
+			* CFrame.Angles(0, math.pi, 0)
+			* CFrame.new(offset + Vector3.new(0, FOUND_H, 0))
 	end
 
 	local rng = Random.new(20240617)
@@ -1857,24 +1959,32 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 
 	-- Run the floors out under the walls rather than stopping at their inner
 	-- face, so there is no one-stud slot at the bottom of every doorway.
-	local stairVoid1: Hole = { x0 = -HALL_X, x1 = -4, z0 = STAIR_Z_HIGH - 1, z1 = STAIR_Z_LOW + 1 }
-	local stairVoid2: Hole = { x0 = 4, x1 = HALL_X, z0 = STAIR_Z_HIGH - 1, z1 = STAIR_Z_LOW + 1 }
+	-- Each void ends exactly where its flight lands, so the landing's edge is
+	-- the last tread's back and the top newel stands in the slab. It runs a
+	-- stud past the foot, for the headroom.
+	local stairVoid1: Hole = { x0 = -HALL_X, x1 = -4, z0 = STAIR_Z_HIGH, z1 = STAIR_Z_LOW + 1 }
+	local stairVoid2: Hole = { x0 = 4, x1 = HALL_X, z0 = STAIR_Z_HIGH - 1, z1 = STAIR_Z_LOW }
 
+	-- The walls stand with their outer face on the footprint line. The ground
+	-- floor runs out to that face, so the band between the footing's top and
+	-- the wall's foot shows its edge rather than a slot. The upper slabs stop
+	-- inside the wall: carried to the face, their edges would share a plane
+	-- with it and flicker.
 	for _, floor in
 		{
-			{ name = "GroundFloor", y = L1, holes = {} :: { Hole } },
-			{ name = "FirstFloor", y = L2, holes = { stairVoid1 } },
-			{ name = "AtticFloor", y = L3, holes = { stairVoid2 } },
+			{ name = "GroundFloor", y = L1, holes = {} :: { Hole }, out = 0 },
+			{ name = "FirstFloor", y = L2, holes = { stairVoid1 }, out = -WALL_T / 2 },
+			{ name = "AtticFloor", y = L3, holes = { stairVoid2 }, out = -WALL_T / 2 },
 		}
 	do
 		slabWithHoles(
 			floor.name,
 			floor.y,
 			SLAB,
-			-HALF_W,
-			HALF_W,
-			-HALF_D,
-			HALF_D,
+			-HALF_W - floor.out,
+			HALF_W + floor.out,
+			-HALF_D - floor.out,
+			HALF_D + floor.out,
 			floor.holes,
 			FLOORBOARD,
 			Enum.Material.WoodPlanks,
@@ -1892,6 +2002,11 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		between the two sides of the house. A grid of identical sashes is the
 		single strongest cue that a building was generated, and it costs nothing
 		to not have one — every window is one line either way.
+
+		Each one is also placed against the plan: at least a stud and a half
+		clear of every hall wall, cross wall, cupboard wall and the chimney
+		breast, so no wall inside meets the outside wall through a window. The
+		pantry and the closets have none, as the real ones do not.
 	]]
 	local function sash(atPos: number, level: number, width: number?, height: number?): Window
 		return {
@@ -1899,16 +2014,23 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 			sill = level + 4,
 			width = width or 6,
 			height = height or 7,
-			style = styleFor(rng),
+			style = "window",
 		}
 	end
 
 	local function vent(atPos: number, width: number, height: number): Window
-		return { at = atPos, sill = L3 + 1, width = width, height = height, style = styleFor(rng) }
+		return { at = atPos, sill = L3 + 1, width = width, height = height, style = "window" }
 	end
 
-	local function door(atPos: number, level: number): Window
-		return { at = atPos, sill = level, width = DOOR_W, height = DOOR_H, style = "door" }
+	local function door(atPos: number, level: number, hinge: number?): Window
+		return {
+			at = atPos,
+			sill = level,
+			width = DOOR_W,
+			height = DOOR_H,
+			style = "door",
+			hinge = hinge,
+		}
 	end
 
 	-- The front wall opens into the bay on every floor, attic included, so the
@@ -1924,8 +2046,20 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		-IN_X,
 		IN_X,
 		Vector3.new(0, 0, 1),
-		{ bayOpening(L1, STOREY), sash(-6, L1, 5), door(4, L1), sash(15, L1), sash(26, L1, 5) },
-		{ bayOpening(L2, STOREY), sash(-6, L2, 5), sash(4, L2, 7, 8), sash(15, L2), sash(25, L2) },
+		{
+			bayOpening(L1, STOREY),
+			sash(-6, L1, 5),
+			door(FRONT_DOOR_X, L1),
+			sash(18, L1),
+			sash(26, L1, 5),
+		},
+		{
+			bayOpening(L2, STOREY),
+			sash(-6, L2, 5),
+			sash(4, L2, 7, 8),
+			sash(18, L2),
+			sash(26, L2, 5),
+		},
 		-- Taller than the knee band it is cut from. The wall pieces clamp to the
 		-- band anyway; what this moves is the opening's lintel, which at knee
 		-- height would hang at exactly head height across the way into the bay.
@@ -1940,8 +2074,8 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		-IN_X,
 		IN_X,
 		Vector3.new(0, 0, -1),
-		{ door(0, L1), sash(-25, L1, 4), sash(-12, L1), sash(11, L1, 5), sash(23, L1, 7) },
-		{ sash(-25, L2, 4), sash(-12, L2), sash(0, L2, 5, 6), sash(12, L2), sash(24, L2) },
+		{ door(0, L1, 1), sash(-8, L1, 4), sash(8, L1, 4), sash(18, L1), sash(27, L1, 4) },
+		{ sash(-8, L2, 4), sash(0, L2, 5, 6), sash(8, L2, 4), sash(18, L2) },
 		{},
 		place,
 		shell
@@ -1953,11 +2087,12 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		-HALF_D,
 		HALF_D,
 		Vector3.new(-1, 0, 0),
-		{ sash(-15, L1), sash(-4, L1, 5), sash(9, L1), sash(17, L1, 4, 5) },
-		{ sash(-14, L2), sash(-2, L2, 5), sash(10, L2, 7, 8), sash(18, L2, 4) },
+		{ sash(-13, L1), sash(-5, L1, 5), sash(8, L1), sash(17, L1, 4, 5) },
+		{ sash(-12, L2), sash(-5, L2, 5), sash(8, L2, 7, 8), sash(17, L2, 4) },
 		{ vent(-9, 5, 3.5) },
 		place,
-		shell
+		shell,
+		WALL_T -- runs through the front and back walls; no skirting inside them
 	)
 	elevation(
 		"Right",
@@ -1967,10 +2102,11 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		HALF_D,
 		Vector3.new(1, 0, 0),
 		{ sash(-16, L1), sash(-6, L1, 5), sash(8, L1), sash(17, L1) },
-		{ sash(-15, L2, 5), sash(-3, L2), sash(11, L2, 7), sash(19, L2, 4) },
+		{ sash(-13, L2, 5), sash(-5, L2, 5), sash(11, L2, 7), sash(19, L2, 4) },
 		{ vent(6, 4, 3), vent(16, 4, 3) },
 		place,
-		shell
+		shell,
+		WALL_T
 	)
 
 	frontBay(rng, place, shell)
@@ -1983,12 +2119,36 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		return { at = atPos, width = INNER_DOOR_W, sill = level, head = level + INNER_DOOR_H }
 	end
 
-	for _, level in { L1, L2 } do
-		-- Upstairs the back door moves to z = -21 on both sides: at z = -14 it
-		-- would open onto the stairwell rather than onto floor.
-		local backDoorZ = if level == L1 then -12 else -18
+	--[[
+		Where the doors in the hall walls go, per floor and per side. Downstairs
+		the kitchen door sits forward, clear of the cupboard under the stair;
+		upstairs the right-hand front door sits back, clear of the cupboard
+		under the attic stair. Every interior doorway gets a cased frame.
+	]]
+	local hallDoors: { [number]: { [number]: { number } } } = {
+		[L1] = { [-HALL_X] = { 12, -5 }, [HALL_X] = { 12, -12 } },
+		[L2] = { [-HALL_X] = { 12, -18 }, [HALL_X] = { 14, -18 } },
+	}
 
+	local function caseDoorway(centre: Vector3, outward: Vector3)
+		window(
+			place(centre) * CFrame.new(Vector3.zero, outward),
+			INNER_DOOR_W,
+			INNER_DOOR_H,
+			"open",
+			PART_T,
+			interior
+		)
+	end
+
+	for _, level in { L1, L2 } do
 		for _, x in { -HALL_X, HALL_X } do
+			local zs = hallDoors[level][x]
+			local openings: { Opening } = {}
+			for _, z in zs do
+				table.insert(openings, doorway(z, level))
+			end
+
 			pierced(
 				"HallWall",
 				"Z",
@@ -1998,12 +2158,16 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 				level,
 				level + STOREY,
 				PART_T,
-				{ doorway(12, level), doorway(backDoorZ, level) },
-				PLASTER,
-				Enum.Material.Plaster,
+				openings,
+				PANEL,
+				Enum.Material.WoodPlanks,
 				place,
 				interior
 			)
+
+			for _, z in zs do
+				caseDoorway(Vector3.new(x, level + INNER_DOOR_H / 2, z), Vector3.new(1, 0, 0))
+			end
 		end
 
 		-- The cross walls splitting each side into a front and a back room.
@@ -2020,11 +2184,12 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 				level + STOREY,
 				PART_T,
 				{ doorway(side * 25, level) },
-				PLASTER,
-				Enum.Material.Plaster,
+				PANEL,
+				Enum.Material.WoodPlanks,
 				place,
 				interior
 			)
+			caseDoorway(Vector3.new(side * 25, level + INNER_DOOR_H / 2, 0), Vector3.new(0, 0, 1))
 		end
 	end
 
@@ -2051,18 +2216,40 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		interior
 	)
 
-	-- A balustrade along the inner edge of each stairwell, so the open hall is a
-	-- view rather than a trap. The outer edge is against the hall partition and
-	-- needs nothing.
-	for _, void in { { hole = stairVoid1, level = L2 }, { hole = stairVoid2, level = L3 } } do
-		local inner = if math.abs(void.hole.x0) < math.abs(void.hole.x1)
-			then void.hole.x0
-			else void.hole.x1
+	-- Railings round each stairwell, so the open hall is a view rather than a
+	-- trap: along the inner edge, and across the end that looks down onto the
+	-- foot of the flight. The other end is where the flight arrives at floor
+	-- level, and the outer edge is the hall partition.
+	for _, void in
+		{
+			{ hole = stairVoid1, level = L2, inner = stairVoid1.x1, dropZ = stairVoid1.z1 },
+			{ hole = stairVoid2, level = L3, inner = stairVoid2.x0, dropZ = stairVoid2.z0 },
+		}
+	do
+		-- Both runs sit on the floor side of their edge.
+		local innerX = void.inner + (if void.inner < 0 then 0.3 else -0.3)
+		local dropZ = void.dropZ + (if void.dropZ > 0 then 0.3 else -0.3)
 
+		railing(
+			"Landing",
+			void.level,
+			{ axis = "Z", fixed = innerX, from = void.hole.z0, to = void.hole.z1 },
+			place,
+			interior
+		)
+		railing(
+			"Landing",
+			void.level,
+			{ axis = "X", fixed = dropZ, from = void.hole.x0, to = void.hole.x1 },
+			place,
+			interior
+		)
+
+		-- A post where the two runs meet.
 		newPart(
-			"Balustrade",
-			Vector3.new(0.5, RAIL_TOP, void.hole.z1 - void.hole.z0),
-			place(Vector3.new(inner, void.level + RAIL_TOP / 2, (void.hole.z0 + void.hole.z1) / 2)),
+			"LandingNewel",
+			Vector3.new(0.8, RAIL_TOP + 0.6, 0.8),
+			place(Vector3.new(innerX, void.level + (RAIL_TOP + 0.6) / 2, dropZ)),
 			TIMBER,
 			Enum.Material.Wood,
 			interior
@@ -2094,7 +2281,7 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		{ cx = 22, width = 13, wall = 6 },
 	}
 
-	type Cut = { from: number, to: number, stop: number }
+	type Cut = { from: number, to: number, stop: number, zEdge: number }
 
 	-- Bare patches where the shingles have gone. Only on the full-height strips,
 	-- so none can hang over a dormer's cut, and lying flat on the slope with
@@ -2122,17 +2309,60 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		end
 	end
 
+	--[[
+		The main slope under a cut runs from the ridge to where the gable's
+		ridge bites it — but the gable's eaves are lower than its ridge, so the
+		true line where the two roofs meet (the valley) runs diagonally from
+		that bite out to the cut's edges, reaching them further down the slope.
+		Past a straight strip end that leaves a triangle of sky on each side.
+		This lays that triangle in the main roof's own plane, from its three
+		corners: where the strip stops at the edge, where the valley reaches
+		the edge, and where the valley crosses the strip's end.
+	]]
+	local function valleys(cut: Cut, side: number)
+		local stripEnd = cut.stop + 2
+		if cut.zEdge - stripEnd <= EPS then
+			return
+		end
+
+		local cx = (cut.from + cut.to) / 2
+		local halfW = (cut.to - cut.from) / 2
+		local normal = Vector3.new(0, math.cos(ROOF_PITCH), side * math.sin(ROOF_PITCH))
+		local drop = -normal * (ROOF_T / 2)
+
+		local function onRoof(x: number, z: number): Vector3
+			return place(Vector3.new(x, RIDGE - ROOF_FALL * z, side * z) + drop).Position
+		end
+
+		for _, dir in { -1, 1 } do
+			local edge = cx + dir * halfW
+			local inner = cx + dir * halfW * ((stripEnd - cut.stop) / (cut.zEdge - cut.stop))
+			triangle(
+				"RoofValley",
+				onRoof(edge, stripEnd),
+				onRoof(edge, cut.zEdge),
+				onRoof(inner, stripEnd),
+				ROOF_T,
+				weathered(SHINGLE, 0.07),
+				Enum.Material.RoofShingles,
+				shell
+			)
+		end
+	end
+
 	local function laySlope(side: number, gables: { Gable }, extra: { Cut })
 		local cuts: { Cut } = table.clone(extra)
 		for _, gable in gables do
+			local stop, zEdge = dormer(side, gable.cx, gable.width, gable.wall, rng, place, shell)
 			table.insert(cuts, {
 				from = gable.cx - gable.width / 2,
 				to = gable.cx + gable.width / 2,
-				stop = dormer(side, gable.cx, gable.width, gable.wall, rng, place, shell),
+				stop = stop,
+				zEdge = zEdge,
 			})
 		end
 
-		table.sort(cuts, function(p, q): boolean
+		table.sort(cuts, function(p: Cut, q: Cut): boolean
 			return p.from < q.from
 		end)
 
@@ -2140,10 +2370,10 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		for _, cut in cuts do
 			roofSlab(cursor, cut.from, 0, ROOF_RUN, side, place, shell)
 			bare(cursor, cut.from, side)
-			-- Under a dormer the slope runs only from the ridge down to where
-			-- the dormer ridge meets it, plus a lap so the two overlap rather
-			-- than meeting on a line that would show daylight.
+			-- Under a gable the slope runs from the ridge to two studs past the
+			-- bite, and the valleys carry it out to the edges from there.
 			roofSlab(cut.from, cut.to, 0, cut.stop + 2, side, place, shell)
+			valleys(cut, side)
 			cursor = cut.to
 		end
 		roofSlab(cursor, HALF_W + EAVE, 0, ROOF_RUN, side, place, shell)
@@ -2152,8 +2382,55 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 
 	-- The bay is cut out of the front slope exactly as a dormer would be, but
 	-- its walls and roof were built by frontBay, so only the cut is passed here.
-	laySlope(1, frontGables, { { from = BAY_X0, to = BAY_X1, stop = BAY_STOP } })
+	-- Its eaves are the knee wall, so its valleys run all the way to the main
+	-- eave.
+	laySlope(1, frontGables, {
+		{ from = BAY_X0, to = BAY_X1, stop = BAY_STOP, zEdge = (RIDGE - KNEE_TOP) / ROOF_FALL },
+	})
 	laySlope(-1, backGables, {})
+
+	--[[
+		The eave walls. The front and back walls stop at the knee-wall top, but
+		the roof does not come down to that height until the fascia, three studs
+		out: at the wall line its underside is two and a half studs higher. This
+		band closes that slot, running up into the slab — buried, since the slab
+		is thicker than the band reaches into it — and skipping every gable and
+		the bay, whose own faces and roofs stand there.
+	]]
+	local eaveWallTop = RIDGE - ROOF_FALL * IN_Z - ROOF_T / math.cos(ROOF_PITCH)
+
+	local function eaveWall(side: number, gables: { Gable }, extra: { Opening })
+		local gaps: { Opening } = table.clone(extra)
+		for _, gable in gables do
+			table.insert(
+				gaps,
+				{ at = gable.cx, width = gable.width, sill = KNEE_TOP, head = eaveWallTop }
+			)
+		end
+		pierced(
+			"WallEave",
+			"X",
+			side * WALL_Z,
+			-IN_X,
+			IN_X,
+			KNEE_TOP,
+			eaveWallTop,
+			WALL_T,
+			gaps,
+			BOARD,
+			Enum.Material.WoodPlanks,
+			place,
+			shell,
+			side
+		)
+	end
+
+	eaveWall(
+		1,
+		frontGables,
+		{ { at = BAY_MID, width = BAY_W, sill = KNEE_TOP, head = eaveWallTop } }
+	)
+	eaveWall(-1, backGables, {})
 
 	-- Ridge cap, hiding the seam where the two slopes meet.
 	newPart(
@@ -2179,21 +2456,105 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		)
 	end
 
-	-- The chimney climbs the back wall and past the ridge, so it breaks the roof
-	-- line. It sits left of both back dormers and between two windows.
+	--[[
+		The chimney climbs the back wall and past the ridge, so it breaks the
+		roof line. It sits left of both back dormers and between two windows,
+		half in the kitchen, where it is the chimney breast.
+
+		The breast has a fireplace in it at the kitchen floor, or it is a brick
+		box in the corner of the room. There is no way to cut a hole in a part,
+		so the bottom of the stack is built from the pieces around the hole: a
+		back, a pier each side, a lintel across, and everything above in one.
+	]]
+	local BRICK = Color3.fromRGB(104, 88, 80)
+	local CHIMNEY_X = -19
+	local STACK_W, STACK_D = 7, 8
 	local stackTop = RIDGE + 8
-	newPart(
-		"Chimney",
-		Vector3.new(7, stackTop - GROUND, 8),
-		place(Vector3.new(-19, (stackTop + GROUND) / 2, -HALF_D)),
-		Color3.fromRGB(104, 88, 80),
-		Enum.Material.Brick,
-		shell
-	)
+	local breastIn = -HALF_D + STACK_D / 2 -- the room-side face of the breast
+
+	local function brick(name: string, size: Vector3, centre: Vector3)
+		newPart(name, size, place(centre), BRICK, Enum.Material.Brick, shell)
+	end
+
+	local function plain(name: string, bottom: number, top: number)
+		brick(
+			name,
+			Vector3.new(STACK_W, top - bottom, STACK_D),
+			Vector3.new(CHIMNEY_X, (top + bottom) / 2, -HALF_D)
+		)
+	end
+
+	-- A fireplace in the breast at `level`, `w` wide and `h` tall. Returns the
+	-- top of its lintel, where the plain stack takes over again.
+	local function fireplace(level: number, w: number, h: number): number
+		local d = 2
+		local lintelTop = level + h + 1
+		local pierW = (STACK_W - w) / 2
+
+		brick(
+			"ChimneyBack",
+			Vector3.new(STACK_W, lintelTop - level, STACK_D - d),
+			Vector3.new(CHIMNEY_X, (lintelTop + level) / 2, -HALF_D - d / 2)
+		)
+		brick(
+			"ChimneyLintel",
+			Vector3.new(STACK_W, lintelTop - level - h, d),
+			Vector3.new(CHIMNEY_X, (lintelTop + level + h) / 2, breastIn - d / 2)
+		)
+		for _, side in { -1, 1 } do
+			brick(
+				"ChimneyPier",
+				Vector3.new(pierW, h, d),
+				Vector3.new(CHIMNEY_X + side * (w / 2 + pierW / 2), level + h / 2, breastIn - d / 2)
+			)
+		end
+
+		-- The back of the firebox is black with old soot: the one thing that
+		-- makes a recess in brickwork read as a fireplace and not a niche.
+		local soot = newPart(
+			"Soot",
+			Vector3.new(w, h, 0.1),
+			place(Vector3.new(CHIMNEY_X, level + h / 2, breastIn - d + 0.05)),
+			Color3.fromRGB(34, 30, 28),
+			Enum.Material.Slate,
+			shell
+		)
+		soot.CanCollide = false
+
+		-- A stone hearth, running from the back of the firebox out onto the
+		-- floor in front, and a timber mantel above. The hearth also covers
+		-- the line where the floor slab and the brick below meet in the same
+		-- plane, which would flicker.
+		local hearth = newPart(
+			"Hearth",
+			Vector3.new(w + 2, 0.2, d + 1),
+			place(Vector3.new(CHIMNEY_X, level + 0.1, breastIn - d / 2 + 0.5)),
+			STONE_DARK,
+			Enum.Material.Slate,
+			shell
+		)
+		hearth.CanCollide = false
+		local mantel = newPart(
+			"Mantel",
+			Vector3.new(w + 2.4, 0.35, 1.1),
+			place(Vector3.new(CHIMNEY_X, lintelTop + 0.2, breastIn + 0.35)),
+			TIMBER,
+			Enum.Material.Wood,
+			shell
+		)
+		mantel.CanCollide = false
+
+		return lintelTop
+	end
+
+	plain("ChimneyBase", GROUND, L1)
+	plain("Chimney", fireplace(L1, 4, 4), L2)
+	plain("Chimney", fireplace(L2, 3, 3), stackTop)
+
 	newPart(
 		"ChimneyCap",
-		Vector3.new(9, 1.2, 10),
-		place(Vector3.new(-19, stackTop + 0.6, -HALF_D)),
+		Vector3.new(STACK_W + 2, 1.2, STACK_D + 2),
+		place(Vector3.new(CHIMNEY_X, stackTop + 0.6, -HALF_D)),
 		STONE_DARK,
 		Enum.Material.Slate,
 		shell
@@ -2208,24 +2569,20 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 	trim(frontGables, backGables, place, shell)
 	decay(rng, place, dressing)
 
-	-- Lanterns on the porch posts: warm, and few, so the green windows stay the
-	-- thing the eye goes to.
-	for _, spot in
-		{
-			Vector3.new(STEP_CENTRE - STEP_HALF - 1, L1 + 8, PORCH_OUT_Z - 1.5),
-			Vector3.new(STEP_CENTRE + STEP_HALF + 1, L1 + 8, PORCH_OUT_Z - 1.5),
-			Vector3.new(9, L1 + 9, HALF_D + 0.9),
-		}
-	do
+	-- Lanterns: one on the inner face of each post flanking the steps, one
+	-- beside the front door. Warm, and few, so they are the only warm thing
+	-- in frame. The housing is glass, so the flame inside can be seen.
+	local function lantern(spot: Vector3)
 		local housing = newPart(
 			"Lantern",
 			Vector3.new(1.6, 2.4, 1.6),
 			place(spot),
 			TIMBER,
-			Enum.Material.Metal,
+			Enum.Material.Glass,
 			dressing
 		)
 		housing.CanCollide = false
+		housing.Transparency = 0.45
 
 		local flame = newPart(
 			"Flame",
@@ -2244,185 +2601,197 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 		light.Parent = flame
 	end
 
-	----------------------------------------------------------------------------
-	-- Hiding places
-	----------------------------------------------------------------------------
-
-	local cupboard = Vector3.new(9, 10, 5)
-
-	-- One wardrobe in each upstairs room, backs to the outer wall.
-	for _, corner in
-		{
-			Vector3.new(-26, L2, -17),
-			Vector3.new(26, L2, -17),
-			Vector3.new(-26, L2, 17),
-			Vector3.new(26, L2, 17),
-		}
-	do
-		local facing = Vector3.new(0, 0, if corner.Z < 0 then 1 else -1)
-		table.insert(hidingSpots, wardrobe(corner, facing, cupboard, 2, place, interior))
+	for _, x in STEP_POST_XS do
+		-- Mounted on the post's inner face, over the deck: half the post and
+		-- half the housing in from the post's centre line.
+		lantern(Vector3.new(x, L1 + 8, PORCH_OUT_Z - 1.5 - 0.9 - 0.8))
 	end
+	lantern(Vector3.new(FRONT_DOOR_X + DOOR_W / 2 + 1.6, L1 + 9, HALF_D + 0.9))
 
-	-- A pantry in the kitchen and a coat cupboard in the parlour.
+	----------------------------------------------------------------------------
+	-- Hiding places: built-in cupboards
+	--
+	-- Every wall is placed so it meets the outside wall between two windows,
+	-- never across one. The under-stair cupboards are closed at the top by a
+	-- triangle that follows the underside of the flight, so there is no gap to
+	-- see the hall through.
+	----------------------------------------------------------------------------
+
+	-- The pantry, in the kitchen's back corner.
 	table.insert(
 		hidingSpots,
-		wardrobe(Vector3.new(-27, L1, -17), Vector3.new(1, 0, 0), cupboard, 1, place, interior)
+		cupboard("Pantry", L1, STOREY, {
+			{ axis = "Z", fixed = -27.5, from = -IN_Z, to = -18.5 },
+			{ axis = "X", fixed = -18.5, from = -IN_X, to = -27.5, door = -29.75 },
+		}, Vector3.new(-29.75, L1, -20.4), Vector3.new(3.6, 8, 3), 1, place, interior)
+	)
+
+	-- A closet in the back corner of each rear bedroom.
+	table.insert(
+		hidingSpots,
+		cupboard("Closet", L2, STOREY, {
+			{ axis = "Z", fixed = -27.5, from = -IN_Z, to = -17.5 },
+			{ axis = "X", fixed = -17.5, from = -IN_X, to = -27.5, door = -29.75 },
+		}, Vector3.new(-29.75, L2, -19.9), Vector3.new(3.6, 8, 4), 2, place, interior)
 	)
 	table.insert(
 		hidingSpots,
-		wardrobe(Vector3.new(-27, L1, 18), Vector3.new(0, 0, -1), cupboard, 1, place, interior)
+		cupboard("Closet", L2, STOREY, {
+			{ axis = "Z", fixed = 27.5, from = -IN_Z, to = -18 },
+			{ axis = "X", fixed = -18, from = 27.5, to = IN_X, door = 29.75 },
+		}, Vector3.new(29.75, L2, -20.2), Vector3.new(3.6, 8, 3.6), 2, place, interior)
 	)
 
-	-- Crates in the attic, at the ends where the roof is highest.
-	for index, spot in
-		{
-			Vector3.new(-24, L3, -12),
-			Vector3.new(-22, L3, 10),
-			Vector3.new(23, L3, -9),
-			Vector3.new(25, L3, 13),
-		}
-	do
-		local size = 7 + (index % 2) * 1.5
-		local crate = newPart(
-			"Crate",
-			Vector3.new(size, size, size),
-			place(spot + Vector3.new(0, size / 2, 0))
-				* CFrame.Angles(0, rng:NextNumber(-0.4, 0.4), 0),
-			BOARD_DARK,
+	--[[
+		The space under the top half of each flight, where there is standing
+		room. The wall on the open side is as tall as the flight's underside at
+		its low end; above that, a triangle on the same plane runs up to the
+		underside at the high end. Heights come from the flight's own numbers,
+		so the wall cannot poke through the treads.
+	]]
+	local function underStair(
+		name: string,
+		level: number,
+		openX: number,
+		backX: number,
+		lowZ: number,
+		highZ: number,
+		lowHead: number,
+		highHead: number,
+		floor: number
+	)
+		local doorZ = (lowZ + highZ) / 2
+		local nearX = if math.abs(openX) < math.abs(backX) then openX else backX
+
+		table.insert(
+			hidingSpots,
+			cupboard(
+				name,
+				level,
+				lowHead,
+				{
+					{ axis = "Z", fixed = openX, from = lowZ, to = highZ, door = doorZ },
+					{ axis = "X", fixed = lowZ, from = openX, to = backX },
+				},
+				Vector3.new((openX + backX) / 2, level, doorZ),
+				Vector3.new(4.5, lowHead - 1, 5),
+				floor,
+				place,
+				interior
+			)
+		)
+
+		-- The far end goes right up to the floor above.
+		pierced(
+			name .. "Wall",
+			"X",
+			highZ,
+			openX,
+			backX,
+			level,
+			level + STOREY,
+			PART_T,
+			{},
+			PANEL,
+			Enum.Material.WoodPlanks,
+			place,
+			interior
+		)
+
+		triangle(
+			name .. "Wall",
+			place(Vector3.new(nearX, level + lowHead, lowZ)).Position,
+			place(Vector3.new(nearX, level + lowHead, highZ)).Position,
+			place(Vector3.new(nearX, level + highHead, highZ)).Position,
+			PART_T,
+			PANEL,
 			Enum.Material.WoodPlanks,
 			interior
 		)
-		CollectionService:AddTag(crate, "HidingSpot")
-		table.insert(hidingSpots, { part = crate, kind = "crate", floor = 3 })
 	end
+
+	-- The underside of a flight at a distance `along` from its foot: the rise
+	-- reached there, less the string board hanging below it. A wall topped
+	-- here runs a hair into the string, so there is no slot to see through.
+	local function underside(along: number): number
+		return (along / (STAIR_Z_LOW - STAIR_Z_HIGH)) * (L2 - L1) - 1.0
+	end
+
+	-- Grand stair: climbs toward -Z, open side toward the hall centre (+X).
+	underStair(
+		"UnderStair",
+		L1,
+		S1_MID + STAIR_W / 2 + 0.3,
+		-HALL_X + PART_T / 2,
+		-8,
+		STAIR_Z_HIGH - 0.5,
+		underside(STAIR_Z_LOW - -8),
+		underside(STAIR_Z_LOW - STAIR_Z_HIGH),
+		1
+	)
+
+	-- Attic stair: climbs toward +Z, open side toward the hall centre (-X).
+	underStair(
+		"UnderStair",
+		L2,
+		S2_MID - STAIR_W / 2 - 0.3,
+		HALL_X - PART_T / 2,
+		0,
+		STAIR_Z_LOW + 0.5,
+		underside(0 - STAIR_Z_HIGH),
+		underside(STAIR_Z_LOW - STAIR_Z_HIGH),
+		2
+	)
 
 	----------------------------------------------------------------------------
-	-- Enough furniture that the rooms read as rooms
+	-- Lamps hanging from the ceilings, at a level you can only just see by
 	----------------------------------------------------------------------------
 
-	local function block(
-		name: string,
-		size: Vector3,
-		floorAt: Vector3,
-		color: Color3,
-		material: Enum.Material
-	)
-		newPart(
-			name,
-			size,
-			place(floorAt + Vector3.new(0, size.Y / 2, 0)),
-			color,
-			material,
-			interior
-		)
-	end
+	local IRON = Color3.fromRGB(46, 44, 42)
 
-	-- Dining table and benches, front right.
-	block(
-		"Table",
-		Vector3.new(16, 0.8, 6),
-		Vector3.new(22, L1 + 3.6, 11),
-		FLOORBOARD,
-		Enum.Material.Wood
-	)
-	for _, side in { -1, 1 } do
-		block(
-			"Bench",
-			Vector3.new(14, 0.6, 2.2),
-			Vector3.new(22, L1 + 2, 11 + side * 5),
-			TIMBER,
-			Enum.Material.Wood
-		)
-		for _, x in { 15, 22, 29 } do
-			block(
-				"TableLeg",
-				Vector3.new(0.9, 3.6, 0.9),
-				Vector3.new(x, L1, 11 + side * 2.5),
-				TIMBER,
-				Enum.Material.Wood
-			)
-		end
-	end
-
-	-- Bookcases along the back wall of the study.
-	for _, x in { 15, 22, 29 } do
-		block(
-			"Bookcase",
-			Vector3.new(6, 11, 2.4),
-			Vector3.new(x, L1, -20),
-			TIMBER,
-			Enum.Material.Wood
-		)
-	end
-
-	-- Kitchen counters down the left wall, clear of the pantry in the corner.
-	block(
-		"Counter",
-		Vector3.new(4, 5, 10),
-		Vector3.new(-29, L1, -6),
-		BOARD_DARK,
-		Enum.Material.Wood
-	)
-	block("Stove", Vector3.new(5, 6, 6), Vector3.new(-23, L1, -7), STONE_DARK, Enum.Material.Metal)
-
-	-- Beds upstairs, so the rooms are unmistakably bedrooms.
-	for _, spot in
+	for _, lamp in
 		{
-			Vector3.new(-21, L2, -8),
-			Vector3.new(21, L2, -8),
-			Vector3.new(-21, L2, 8),
-			Vector3.new(21, L2, 8),
+			{ at = Vector3.new(0, L1 + STOREY - 2.5, 0), from = L1 + STOREY },
+			{ at = Vector3.new(0, L2 + STOREY - 2.5, -8), from = L2 + STOREY },
+			{ at = Vector3.new(0, L3 + 9, 0), from = RIDGE - 1 },
 		}
 	do
-		block("BedFrame", Vector3.new(8, 2.4, 13), spot, TIMBER, Enum.Material.Wood)
-		block(
-			"Mattress",
-			Vector3.new(7.4, 1.6, 12),
-			spot + Vector3.new(0, 2.4, 0),
-			Color3.fromRGB(132, 126, 112),
-			Enum.Material.Fabric
-		)
-	end
-
-	-- Dust sheets over shapes in the parlour: the cheapest way to suggest
-	-- furniture nobody has touched in thirty years.
-	for _, spot in { Vector3.new(-18, L1, 7), Vector3.new(-28, L1, 5) } do
-		block(
-			"DustSheet",
-			Vector3.new(8, 6, 6),
-			spot,
-			Color3.fromRGB(176, 172, 160),
-			Enum.Material.Fabric
-		)
-	end
-
-	----------------------------------------------------------------------------
-	-- Interior light, at a level you can only just see by
-	----------------------------------------------------------------------------
-
-	for _, spot in
-		{
-			Vector3.new(0, L1 + STOREY - 2, 0),
-			Vector3.new(0, L2 + STOREY - 2, -8),
-			Vector3.new(0, L3 + 8, 0),
-		}
-	do
-		local fixture = newPart(
-			"Fixture",
-			Vector3.new(1.4, 1.4, 1.4),
-			place(spot),
-			TIMBER,
+		local drop = lamp.from - lamp.at.Y
+		local chain = newPart(
+			"LampChain",
+			Vector3.new(0.15, drop, 0.15),
+			place(lamp.at + Vector3.new(0, drop / 2, 0)),
+			IRON,
 			Enum.Material.Metal,
 			interior
 		)
-		fixture.CanCollide = false
-		fixture.Transparency = 0.2
+		chain.CanCollide = false
+
+		local shade = newPart(
+			"LampShade",
+			Vector3.new(2.2, 1.2, 2.2),
+			place(lamp.at + Vector3.new(0, 0.3, 0)),
+			IRON,
+			Enum.Material.Metal,
+			interior
+		)
+		shade.CanCollide = false
+
+		local bulb = newPart(
+			"LampBulb",
+			Vector3.new(0.9, 0.9, 0.9),
+			place(lamp.at - Vector3.new(0, 0.5, 0)),
+			Color3.fromRGB(214, 190, 150),
+			Enum.Material.Neon,
+			interior
+		)
+		bulb.CanCollide = false
 
 		local light = Instance.new("PointLight")
 		light.Color = Color3.fromRGB(196, 178, 140)
 		light.Brightness = 1.1
 		light.Range = 40
-		light.Parent = fixture
+		light.Parent = bulb
 	end
 
 	model.Parent = parent
@@ -2438,9 +2807,12 @@ function Manor.build(pivot: CFrame, parent: Instance): Manor
 
 	return {
 		model = model,
-		entrance = pivot
-			* CFrame.new(STEP_CENTRE, GROUND, PORCH_OUT_Z + 18)
-			* CFrame.Angles(0, math.pi, 0),
+		-- Built from two points, so there is no sign to get backwards: standing
+		-- height above the ground at the foot of the steps, looking at the door.
+		entrance = CFrame.lookAt(
+			place(Vector3.new(STEP_CENTRE, GROUND + 3, PORCH_OUT_Z + 18)).Position,
+			place(Vector3.new(FRONT_DOOR_X, GROUND + 3, WALL_Z)).Position
+		),
 		hidingSpots = hidingSpots,
 		partCount = built,
 	}

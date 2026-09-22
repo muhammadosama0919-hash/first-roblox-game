@@ -204,6 +204,9 @@ CF = {
 	end,
 }
 CF.fromEulerAnglesXYZ = CF.Angles
+CF.lookAt = function(at, target)
+	return CF.new(at, target)
+end
 CF.identity = cf(V3.zero, V3.xAxis, V3.yAxis, V3.zAxis)
 
 ----------------------------------------------------------------------

@@ -65,7 +65,7 @@ local workspace = Instance.new("Folder")
 workspace.Name = "Workspace"
 
 local ok, result = pcall(function()
-\treturn Manor.build(CFrame.new(), workspace)
+\treturn Manor.build(CFrame.Angles(0, math.pi, 0), workspace)
 end)
 
 for _, w in warnings do

@@ -145,12 +145,15 @@ Saving is off until the place is published — `GetDataStore` throws outright in
 an unpublished place. The code detects this at startup and says so once. The
 yellow `[PlayerData]` warnings are expected, not failures.
 
-`Manor.luau` builds a derelict three-floor manor from ~1400 Parts and
+`Manor.luau` builds a derelict three-floor manor from ~1500 Parts and
 WedgeParts: two storeys of rooms plus an open attic, a switchback stair
-through a double-height hall, a projecting gabled bay, a porch, ten tagged
-hiding places (`CollectionService` tag `HidingSpot`). It is deliberately
-standalone — requires nothing, reads no Config — so it drops into any version
-of the project. `ManorSpawn.server.luau` places it: set `PIVOT` there; it finds
+through a double-height hall, a projecting gabled bay, a porch, and five
+built-in cupboards to hide in (a pantry, two closets, the space under each
+flight), each with an invisible volume tagged `HidingSpot`. There is no
+furniture: the developer asked for nothing inside but architecture. It is
+deliberately standalone — requires nothing, reads no Config — so it drops
+into any version of the project. Its pivot is at ground level under the
+front steps, facing the way the house faces. `ManorSpawn.server.luau` places it: set `PIVOT` there; it finds
 the ground itself by raycasting the terrain and clears trees from its
 footprint. The house is asymmetric on purpose: a symmetrical plan with a
 centred porch read as a chapel, and it took a projecting bay and a one-sided

@@ -204,8 +204,14 @@ def render(parts, tris, cols, emis, pid, eye, target, size=(1500, 950), fov=40.0
         if not inside.any():
             continue
 
+        # Depth and position are interpolated perspective-correctly (in 1/z),
+        # not affinely in screen space: for a floor triangle that runs from
+        # under the camera to the far wall, the affine value is wrong by
+        # studs, and parts below the floor win the depth test through it.
         za, zb, zc = depth[i]
-        z = za + w1 * (zb - za) + w0 * (zc - za)
+        wa = 1 - w0 - w1
+        inv = wa / za + w1 / zb + w0 / zc
+        z = 1.0 / inv
         sub = zbuf[iy0:iy1, ix0:ix1]
         win = inside & (z < sub)
         if not win.any():
@@ -217,7 +223,8 @@ def render(parts, tris, cols, emis, pid, eye, target, size=(1500, 950), fov=40.0
         if pid[i] >= 0 and not emis[i]:
             p = parts[pid[i]]
             A, B, C = tris[i]
-            wp = A + w1[win][:, None] * (B - A) + w0[win][:, None] * (C - A)
+            wp = (wa[win][:, None] * (A / za) + w1[win][:, None] * (B / zb)
+                  + w0[win][:, None] * (C / zc)) * z[win][:, None]
             local = (wp - p.pos) @ p.R
             mult = pattern(p.material, local, p.size)
             colour = np.clip(base[None, :] * mult[:, None], 0, 1)

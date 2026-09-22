@@ -22,7 +22,7 @@ HERE = pathlib.Path(__file__).parent
 parts = load(HERE / "parts.tsv")
 
 X0, X1 = -48, 48
-Y0, Y1 = -10, 68
+Y0, Y1 = -4, 76
 Z0, Z1 = -50, 50
 NX, NY, NZ = X1 - X0, Y1 - Y0, Z1 - Z0
 
@@ -152,7 +152,7 @@ def trace(parent, cell, seed):
     return path[::-1]
 
 
-seed = nearest_standable(20, -7, 46, radius=4)
+seed = nearest_standable(20, 0, 46, radius=4)
 if seed is None:
     print("!! no standable cell near the front steps")
     sys.exit(1)
@@ -163,9 +163,11 @@ print(f"seed {seed}, {int(reached.sum())} cells reached")
 # Targets
 # --------------------------------------------------------------------------
 
-L1, L2, L3 = 0, 14, 28
+# The pivot is ground level; house-local Y = 0 (the ground floor) is 7 up.
+G = 7
+L1, L2, L3 = G, G + 14, G + 28
 targets = [
-    ("front steps foot", (20, -7, 46), None),
+    ("front steps foot", (20, 0, 46), None),
     ("porch, right end", (36, L1, 27), None),
     ("porch, left end by bay", (-9, L1, 27), None),
     ("porch return", (37, L1, 12), None),
@@ -177,7 +179,7 @@ targets = [
     ("dining", (22, L1, 4), None),
     ("study", (22, L1, -8), None),
     ("back stoop", (0, L1, -28), None),
-    ("stair 1, mid flight", (-8, 7, -4), None),
+    ("stair 1, mid flight", (-8, G + 7, -4), None),
     ("landing, first floor", (0, L2, -20), None),
     ("landing, between stairs", (0, L2, -4), None),
     ("bedroom NW", (-16, L2, -18), None),
@@ -185,7 +187,7 @@ targets = [
     ("bedroom NE", (16, L2, -18), None),
     ("bedroom SE", (16, L2, 18), None),
     ("bay, first floor", (-21, L2, 27), None),
-    ("stair 2, mid flight", (8, 21, -4), None),
+    ("stair 2, mid flight", (8, G + 21, -4), None),
     ("attic, centre", (0, L3, -10), None),
     ("attic, left end", (-24, L3, 0), None),
     ("attic, right end", (24, L3, 0), None),
@@ -195,9 +197,9 @@ targets = [
 
 # Places a player should NOT be able to get to on foot.
 forbidden = [
-    ("porch roof", (15, 15, 27)),
-    ("main roof, front slope", (0, 45, 14)),
-    ("bay roof", (-21, 38, 30)),
+    ("porch roof", (15, G + 15, 27)),
+    ("main roof, front slope", (0, G + 45, 14)),
+    ("bay roof", (-21, G + 38, 30)),
 ]
 
 # Hiding places: aim at the floor inside the tagged volume, and insist the
@@ -206,7 +208,7 @@ for p in parts:
     if "HidingSpot" not in p.tags:
         continue
     half = p.size / 2
-    if p.name == "HidingVolume":
+    if p.name.endswith("HidingVolume"):
         # Extents in the volume's own frame; it is axis-aligned or rotated 90.
         corners = np.array([[sx, 0, sz] for sx in (-1, 1) for sz in (-1, 1)]) * half
         world = corners @ p.R.T + p.pos
@@ -255,7 +257,7 @@ for name, hint in forbidden:
 
 print()
 print("standable cells reached per floor band:")
-for label, lo, hi in (("ground", -1, 6), ("first", 13, 20), ("attic", 27, 34)):
+for label, lo, hi in (("ground", L1 - 1, L1 + 6), ("first", L2 - 1, L2 + 6), ("attic", L3 - 1, L3 + 6)):
     print(f"  {label:8} {int(reached[:, lo - Y0:hi - Y0, :].sum())}")
 
 print()
