@@ -188613,7 +188613,11 @@ CollectionService:GetInstanceAddedSignal("Door"):Connect(wire)
 	     changes; where it stands and which way it faces stay as placed. This
 	     relies on the house's pivot being at the foot of its foundations,
 	     which is where the exporter puts it.
-	  3. Trees, bushes, rocks and reeds inside the footprint are removed,
+	  3. Every GroundCut in the house is dug out of the pad: an unseen part
+	     marking a hole the house needs in the ground, like an open grave.
+	     A model can hold a hole's sides but cannot make the hole, and the
+	     pad would fill it straight back in.
+	  4. Trees, bushes, rocks and reeds inside the footprint are removed,
 	     including any planted after this ran.
 
 	Embedded in every exported house model, next to DoorController, so a
@@ -188754,6 +188758,22 @@ local function standOnGround(): (number?, number?, number?)
 	return pad, low, high
 end
 
+-- Dig out every GroundCut, where the house stands now. Returns how many.
+local function digCuts(): number
+	local terrain = Workspace:FindFirstChildOfClass("Terrain")
+	if not terrain then
+		return 0
+	end
+	local count = 0
+	for _, d in house:GetDescendants() do
+		if d.Name == "GroundCut" and d:IsA("BasePart") then
+			terrain:FillBlock(d.CFrame, d.Size, Enum.Material.Air)
+			count += 1
+		end
+	end
+	return count
+end
+
 worldBuilt()
 
 local ok, pad, low, high = pcall(standOnGround)
@@ -188769,6 +188789,19 @@ elseif pad and low and high then
 			high
 		)
 	)
+	local dug, cuts = pcall(digCuts)
+	if not dug then
+		warn(`[{house.Name}] could not dig its holes in the ground: {cuts}`)
+	elseif type(cuts) == "number" and cuts > 0 then
+		print(
+			string.format(
+				"[%s] dug %d hole%s in the ground",
+				house.Name,
+				cuts,
+				if cuts == 1 then "" else "s"
+			)
+		)
+	end
 end
 
 ----------------------------------------------------------------------------

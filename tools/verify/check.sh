@@ -2,7 +2,7 @@
 # Build each house for real (the unmodified module, run against the Roblox API
 # shim), prove it, and export it as a model file. Stops at the first failure.
 #
-#   tools/verify/check.sh               all three houses
+#   tools/verify/check.sh               every building: the three houses, the church, the farm
 #   tools/verify/check.sh Villa         just one
 #   RENDER=1 tools/verify/check.sh      also write preview renders to out/<House>/
 #
@@ -14,7 +14,7 @@ cd "$(dirname "$0")"
 if [ $# -gt 0 ]; then
 	houses=("$@")
 else
-	houses=(Manor Villa Lodge)
+	houses=(Manor Villa Lodge Church Farm)
 fi
 
 echo "== stylua"

@@ -2,13 +2,14 @@
 
 There is no Roblox runtime in the environment this project is worked on in, so
 this is how the houses in `src/server/Houses/` get checked before they are sent
-anywhere. Everything is per house: `Manor`, `Villa` or `Lodge`.
+anywhere. Everything is per building: the houses `Manor`, `Villa` and
+`Lodge`, and `Church` and `Farm`, each with the grounds round it.
 
 `roblox_shim.luau` is just enough of the Roblox API — `Vector3`, `CFrame`,
 `Color3`, `Enum`, `Instance.new`, `Random`, `CollectionService` — to let the
 real module files execute unmodified and capture every part they create.
-`compose.py` splices the shim, the shared kit (`HouseKit`, `Furnish`, `Decor`)
-and one house into a single chunk, because Luau's CLI sandboxes globals per
+`compose.py` splices the shim, the shared kit (`HouseKit`, `Furnish`, `Decor`,
+`Yard`) and one building into a single chunk, because Luau's CLI sandboxes globals per
 module and injection does not cross a `require`. It writes the capture to
 `work/<House>.tsv`, which every other tool reads through `capture.py`.
 
@@ -18,8 +19,10 @@ Then, from the capture:
   (every lamp is dead); nothing seen from inside is paler than a luminance
   ceiling, so there is no white; every door is swung shut-to-open in steps
   and may not pass through anything; no piece of furniture is pushed into a
-  wall, floor or stair. Walls and wedges are tested as the solids they are,
-  not as bounding boxes.
+  wall, floor or stair, and outside no loose piece (a headstone, a bale) is
+  pushed into the walls, fences, gates, paths or small buildings of the
+  grounds (the `Grounds` folder). Walls and wedges are tested as the solids
+  they are, not as bounding boxes.
 - `nav.py` — voxelises everything that collides and flood-fills from outside
   the front door with a character-sized probe. Every room, stair and tagged
   hiding place must be reachable, and the roofs must not be. For a house
@@ -32,7 +35,8 @@ Then, from the capture:
   what geometry exists: a hole in a roof is a hole in the picture.
 - `export.py` — writes the capture as a Rojo JSON model, has Rojo build
   `build/<House>.rbxm` and `.rbxmx`, then reads the `.rbxmx` back and checks
-  every part's position, size, rotation matrix, colour, material, shape,
+  every part's position, size, rotation matrix (parts that share a name,
+  position and size are paired by rotation), colour, material, shape,
   transparency, collision, tags and attributes against the capture, plus the
   model's pivot, its doors and the `DoorController` and `Groundwork` scripts
   inside it. The `.rbxm`, the file that actually gets sent, is built back
@@ -40,8 +44,10 @@ Then, from the capture:
 
 And one check that is not per house: `groundwork.py` runs the real
 `Groundwork.server.luau`, the script in every house that levels the
-generated ground under it, stands it there and clears the trees out, against
-a mocked world with a slope, a turned house and trees in and out of it.
+generated ground under it, stands it there, digs out its `GroundCut` holes
+(the church's open grave, the farm's well) and clears the trees out, against
+a mocked world with a slope, a turned house with a hole to dig, and trees in
+and out of it.
 
 `houses.py` says, for each house, what the walkability check must reach and
 must not, and where the renders look.
@@ -64,7 +70,7 @@ Python needs `numpy`, `scipy` and `Pillow`.
 
 ## Run
 
-    tools/verify/check.sh                 every house
+    tools/verify/check.sh                 every building
     tools/verify/check.sh Lodge           one house
     RENDER=1 tools/verify/check.sh        and write the renders
 
@@ -78,6 +84,14 @@ Or one step at a time, from this folder:
 
 `Random` is a MINSTD generator here, not Roblox's. The structure does not
 depend on it; the scatter of rubble, slipped boards and which windows are
-broken does, so a house built live by code lands those differently. The model
+broken does, and so do which graves the churchyard gets and how the farm's
+maze is cut, so a building built live by code lands those differently. The model
 files are exported from the capture, so what they contain is exactly what was
 checked here.
+
+A hole in the ground cannot be seen here: there is no terrain in a capture,
+and the renders draw a flat ground over everything below it. The open grave
+and the well are checked as parts (their sides, what is in them, nothing
+pushed into anything) and `groundwork.py` checks that their `GroundCut`s are
+dug where the building ends up; what the dug terrain looks like round them is
+for Studio.

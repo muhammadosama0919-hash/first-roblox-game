@@ -997,7 +997,7 @@ export type DoorOptions = {
 	thickness: number?,
 	color: Color3?,
 	panel: Color3?,
-	style: string?, -- "panel" (four raised panels a side) | "cabinet" (one) | "plank" (boards and ledges)
+	style: string?, -- "panel" (four raised panels a side) | "cabinet" (one) | "plank" (boards and ledges) | "bare" (the leaf alone, for a caller to dress)
 	openAngle: number?, -- how far it swings, degrees
 	startAngle: number?, -- how far open it stands when built, degrees
 	name: string?,
@@ -1073,7 +1073,10 @@ function Kit.door(frame: CFrame, width: number, height: number, o: DoorOptions):
 	)
 
 	local style = o.style or "panel"
-	if style == "cabinet" then
+	if style == "bare" then
+		-- Nothing on the leaf: the caller dresses it, like a field gate whose
+		-- bars ride on an unseen leaf.
+	elseif style == "cabinet" then
 		-- One raised panel a side: wardrobes and cupboards, whose leaves are
 		-- too narrow for four.
 		for _, face in { -1, 1 } do

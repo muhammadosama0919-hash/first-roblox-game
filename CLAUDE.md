@@ -22,11 +22,11 @@ placed geometry is destroyed with no warning and no merge. Send the `.rbxmx`
 models instead; they carry only code and insert into an existing place. This
 matters now that meshes are being imported by hand.
 
-**The houses are delivered as model files, sent straight to the developer.**
-`tools/verify/export.py` writes `build/Manor.rbxm`, `build/Villa.rbxm` and
-`build/Lodge.rbxm`: each a complete house with its own copies of
-`DoorController` and `Groundwork` inside, which they download and insert into
-their place. They asked for the model itself, not an `.rbxl`, and said plainly
+**The buildings are delivered as model files, sent straight to the developer.**
+`tools/verify/export.py` writes `build/Manor.rbxm`, `build/Villa.rbxm`,
+`build/Lodge.rbxm`, `build/Church.rbxm` and `build/Farm.rbxm`: each a complete
+building with its own copies of `DoorController` and `Groundwork` inside,
+which they download and insert into their place. They asked for the model itself, not an `.rbxl`, and said plainly
 that git is never how files reach their machine, so a push is not a delivery.
 Send the file.
 
@@ -62,12 +62,15 @@ What **can** be verified, and should be, every time:
   caught a bug that would have flooded 1648 terrain cells outside the pond.
 - **Executing a geometry module for real.** `tools/verify/check.sh` runs each
   house module unmodified under the Luau CLI against a shim of the Roblox API
-  (`roblox_shim.luau`) and captures every part. Per house, it then proves
-  there is no light and nothing pale inside, swings every door to see that it
-  hits nothing, tests every piece of furniture against the walls, floors and
-  stairs, flood-fills with a character-sized probe to prove every room,
+  (`roblox_shim.luau`) and captures every part. Per building (the three
+  houses, the church and the farm), it then proves there is no light and
+  nothing pale inside, swings every door and gate to see that it hits
+  nothing, tests every piece of furniture against the walls, floors and
+  stairs and every headstone, bale and cart against the grounds' walls,
+  fences and paths, flood-fills with a character-sized probe to prove every room,
   stair and hiding place is reachable and the roofs are not (and that the
-  villa's two doors are its only ways out), exports the `.rbxm` and reads it
+  villa's two doors are its only ways out, and that the farm's maze can be
+  solved to every corner), exports the `.rbxm` and reads it
   back part by part. `RENDER=1` adds z-buffer renders, where a hole in the
   roof is a hole in the picture. This found a stair whose treads ate into the
   corridor beside it, a wardrobe buried to its waist in a floor, sill logs
@@ -133,14 +136,19 @@ src/
                           windows, doors, stairs, rods, triangles, palette.
       Furnish.luau        Furniture. Every piece a Model tagged Furniture.
       Decor.luau          Dead lamps, pictures, trophies, dirt and damage.
+      Yard.luau           Outside: headstones, walls, railings, paths, the
+                          lych-gate, mausoleum, trees, crows; fences, field
+                          gates, bales, wagon, well, scarecrow, corn rows.
       Manor.luau          House #1. Villa.luau is #2, Lodge.luau is #3.
+      Church.luau         The church and its churchyard.
+      Farm.luau           The barn, silo, windpump, yard and corn maze.
       DoorController.server.luau   Opens every Door-tagged model. A copy is
-                          embedded in each exported house model.
-      Groundwork.server.luau       Also embedded in each house: levels the
-                          generated ground under it, stands it there, clears
-                          the trees out of it.
+                          embedded in each exported model.
+      Groundwork.server.luau       Also embedded in each model: levels the
+                          generated ground under it, stands it there, digs
+                          its GroundCut holes, clears the trees out of it.
       ManorSpawn.server.luau       Builds the manor if none is placed, and
-                          clears trees from under every house.
+                          clears trees from under every building.
   client/
     Main.client.luau      Coin spin, pickup popup.
     Shop.client.luau      Shop menu.
@@ -148,7 +156,7 @@ src/
   shared/
     Config.luau           Every tunable number. Change gameplay here.
     Shop.luau             Item list — name, price, effect.
-tools/verify/             Runs the houses without Roblox. See its README.
+tools/verify/             Runs the buildings without Roblox. See its README.
 ```
 
 Most visual quality comes from `Lighting` in `place.project.json`, not geometry:
@@ -196,6 +204,29 @@ WedgeParts in `src/server/Houses/`, furnished, and exported as models:
 - **Lodge** (#3, ~3400 parts): one spacious storey of round logs, a great
   room open to the trusses, a fieldstone chimney, trophy room, workshop.
 
+And two larger pieces of the village, each with its grounds, built and
+checked the same way:
+
+- **Church** (~6500 parts): stone nave and aisles, chancel, porch, vestry,
+  and a tower with a broach spire; eight flights round an open well up to
+  the bell. Pews, pulpit, organ and three-part confessional (both hiding
+  places), altar, a bier in the tower. The churchyard round it: walls with a
+  fallen stretch, railings, a lych-gate and a wicket gate that open, a
+  mausoleum with a door (a hiding place), 80-odd graves laid in rows clear
+  of paths and gates, dead trees, a yew, crows, an open grave.
+- **Farm** (~4000 parts): a gambrel barn with a drive-through aisle,
+  twelve stalls with gates, lofts on four sides up a stair, a tack room and
+  feed room, a hay door under its hoist; a stave silo you can walk into, a
+  windpump and tank, outhouse, tool shed and hen house, a fenced yard with
+  field gates, and behind it a maze of dead corn (seeded, one way between
+  any two cells) with a scarecrow in the middle. Hiding: the harness and
+  tool cupboards, the silo, the outhouse, under the hay wagon.
+
+Loose pieces outside go in `Churchyard`/`Farmyard`; walls, fences, gates'
+posts, paths and small buildings in `Grounds`, which the checks treat as
+structure. The field gates are Door models whose leaf is an unseen board
+with the bars riding on it, so they swing and collide like any door.
+
 What the developer asked for, which a later change must not undo — the
 checks enforce the first three:
 
@@ -217,8 +248,10 @@ stands it on the ground. The world's terrain only exists once the game runs,
 so a house placed in Studio's editor cannot be put on it by hand: the
 `Groundwork` script inside each house does it at server start, levelling a
 pad at the middle height of the ground it covers, moving the house onto it
-(height only) and clearing the generator's trees from its footprint. In a
-place without the generator it touches nothing. `groundwork.py` runs it
+(height only), digging out any `GroundCut` part inside it (an unseen box
+marking a hole the building needs: the open grave, the well — a model can
+hold a hole's sides but not make one) and clearing the generator's trees
+from its footprint. In a place without the generator it touches nothing. `groundwork.py` runs it
 against a mocked world. `ManorSpawn.server.luau` builds a manor at its
 `PIVOT` if none is in the place, and also clears trees from under every
 house it finds. `DoorController` reads each hinge live on every step, so a

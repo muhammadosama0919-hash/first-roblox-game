@@ -296,3 +296,63 @@ HOUSES["Church"] = dict(
         ],
     ),
 )
+
+# --------------------------------------------------------------------------
+# The farm
+# --------------------------------------------------------------------------
+
+_LOFT = 12
+
+HOUSES["Farm"] = dict(
+    G=1,
+    bounds=dict(x=(-68, 68), y=(-3, 60), z=(-112, 86)),
+    seed=(0, -1, 70),
+    floors=[("ground", 0), ("lofts", _LOFT)],
+    inside=(0, 0, 0),
+    targets=[
+        ("the lane, outside the gate", (0, -1, 83)),
+        ("the yard, by the well", (-24, -1, 44)),
+        ("barn, the aisle", (0, 0, 0)),
+        ("barn, by the back doors", (2, 0, -27)),
+        ("barn, a stall", (-12, 0, 9.5)),
+        ("barn, the worst stall", (-12, 0, -4.5)),
+        ("the tack room", (-11, 0, 25)),
+        ("the feed room", (12, 0, 22.5)),
+        ("the stair, halfway", (-4.7, 6, -15.4)),
+        ("the loft, back", (0, _LOFT, -23.5)),
+        ("the loft, left", (-9, _LOFT, 0)),
+        ("the loft, right", (9, _LOFT, 0)),
+        ("the loft over the front doors", (0, _LOFT, 25)),
+        ("at the hay door", (0, _LOFT, 27.8)),
+        ("behind the barn", (0, -1, -34)),
+        ("the silo, inside", (28, -1, -6)),
+        ("by the windpump", (46, -1, 30)),
+        ("the tool shed", (-37, -1, 1)),
+        ("the maze, the scarecrow", (0, -1, -70)),
+        ("the maze, far corner", (-28, -1, -102)),
+        ("the maze, from the field", (-37, -1, -86)),
+    ],
+    forbidden=[
+        ("barn roof, upper pitch", (6, 26.9, 0)),
+        ("barn roof, lower pitch", (15, 18.6, -10)),
+        ("silo dome", (28, 48.2, -8)),
+        ("the hay hood", (0, 25.3, 32.5)),
+    ],
+    views=dict(
+        cut=[("11-cut-ground.png", 6), ("12-cut-lofts.png", _LOFT + 6)],
+        eye=[
+            ("20-aisle.png", (0, 4.6, 26), (0, 10, -30)),
+            ("21-aisle-back.png", (2, 4.6, -26), (0, 12, 26)),
+            ("22-stall.png", (-8.4, 4.6, 7.2), (-16.5, 3.5, 10.5)),
+            ("23-tack-room.png", (-8.6, 4.6, 21.0), (-13.5, 5, 29)),
+            ("24-loft.png", (-9, _LOFT + 4.6, -20), (-10, _LOFT + 3, 20)),
+            ("25-hay-door.png", (0, _LOFT + 4.6, 22), (0, _LOFT + 2, 40)),
+            ("26-yard.png", (0, 3.6, 86), (0, 8, 0)),
+            ("27-silo.png", (20, 3.6, 16), (28, 12, -8)),
+            ("28-maze.png", (-4, 3.6, -36), (-4, 2, -70)),
+            ("29-scarecrow.png", (0, 3.6, -64), (0, 5, -74)),
+            ("30-silo-inside.png", (27.5, 3.6, -3), (28, 3, -14)),
+            ("31-outbuildings.png", (-20, 3.6, 30), (-44, 4, 0)),
+        ],
+    ),
+)

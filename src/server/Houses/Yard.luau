@@ -369,8 +369,9 @@ end
 --[[
 	A path from `at` along its +X for `length`, `width` across, flat on the
 	ground. "flags" lays it in flagstones of every size, a few of them gone;
-	"gravel" is one long bed. Its parts are named for the checks that leave
-	flat things on the ground alone.
+	"gravel" is one long bed, of gravel or of whatever `color` and
+	`material` say, like a farm track's beaten earth. Its parts are named
+	for the checks that leave flat things on the ground alone.
 ]]
 function Yard.path(at: CFrame, length: number, width: number, parent: Instance, o: Options?)
 	local style: string = opt(o, "style", "flags")
@@ -380,8 +381,8 @@ function Yard.path(at: CFrame, length: number, width: number, parent: Instance, 
 			"Path",
 			V(length, 0.3, width),
 			V(length / 2, 0.02, 0),
-			Kit.weathered(GRAVEL, 0.05),
-			M.Pebble
+			Kit.weathered(opt(o, "color", GRAVEL), 0.05),
+			opt(o, "material", M.Pebble)
 		)
 		return
 	end
@@ -1678,6 +1679,688 @@ function Yard.mausoleum(
 		1,
 		furniture
 	)
+end
+
+----------------------------------------------------------------------------
+-- The farm
+----------------------------------------------------------------------------
+
+local HAY = rgb(92, 80, 50) -- a season old, gone from gold to dun
+local TWINE = rgb(60, 50, 36)
+local BURLAP = rgb(84, 70, 50)
+local DRY_STALK = rgb(96, 84, 56)
+local DRY_LEAF = rgb(86, 78, 48)
+local DARK_WATER = rgb(16, 20, 18)
+Yard.HAY = HAY
+
+--[[
+	A split-rail fence from `at` along its +X for `length`: round posts every
+	few studs and three rails between each pair, sagging and wandering a
+	little the way old rails do, the odd one fallen. An unseen board down the
+	run is what stops a player, so no gap has to.
+]]
+function Yard.fence(at: CFrame, length: number, parent: Instance, o: Options?)
+	local h: number = opt(o, "height", 4.2)
+	local wood: Color3 = opt(o, "wood", TIMBER)
+	local p = pen(at, parent)
+	local wear = Kit.wear()
+	local posts = math.max(1, math.ceil(length / 8))
+	local span = length / posts
+	for i = 0, posts do
+		p.rod(
+			"FencePost",
+			V(i * span, -SINK, 0),
+			V(i * span, h + 0.3, 0),
+			0.6,
+			Kit.weathered(wood, 0.08),
+			M.Wood
+		)
+	end
+	for i = 0, posts - 1 do
+		for k, y in { 0.3, 0.58, 0.86 } do
+			if wear:NextNumber() < 0.05 then
+				continue -- this one has fallen
+			end
+			local z = if k == 2 then 0.25 else -0.25
+			p.rod(
+				"FenceRail",
+				V(i * span, y * h + wear:NextNumber(-0.15, 0.15), z),
+				V((i + 1) * span, y * h + wear:NextNumber(-0.15, 0.15), z),
+				0.34,
+				Kit.weathered(wood, 0.1),
+				M.Wood
+			)
+		end
+	end
+	blocker(p.box("FenceCore", V(length, h, 1.2), V(length / 2, h / 2, 0), wood, M.Wood))
+end
+
+--[[
+	A five-bar field gate that opens like any door: a Door model whose Leaf
+	is an unseen board the gate's timbers ride on, so it swings, collides and
+	carries its prompt like a door while looking like open timber. `frame` is
+	centred in the gateway and looks the way the gate opens.
+]]
+function Yard.barGate(
+	frame: CFrame,
+	width: number,
+	height: number,
+	parent: Instance,
+	o: Options?
+): Model
+	local hinge: number = opt(o, "hinge", 1)
+	local wood = Kit.weathered(opt(o, "wood", TIMBER), 0.06)
+	local door = Kit.door(frame, width, height, {
+		parent = parent,
+		hinge = hinge,
+		swing = 1,
+		thickness = 0.35,
+		style = "bare",
+		gap = 0.15,
+		openAngle = opt(o, "openAngle", 90),
+		name = opt(o, "name", "FieldGate"),
+		color = wood,
+	})
+	local leaf = door:FindFirstChild("Leaf") :: BasePart?
+	if not leaf then
+		return door
+	end
+	leaf.Transparency = 1
+	leaf.CastShadow = false
+	local cf, w, h = leaf.CFrame, leaf.Size.X, leaf.Size.Y
+	local function timber(name: string, a: Vector3, b: Vector3, d: number)
+		fine(Kit.rod(name, cf * a, cf * b, d, wood, M.Wood, door))
+	end
+	-- The stiles, the heavier one on the hinge side, the bars between them
+	-- and the brace from the hinge's foot up to the latch's top.
+	local hingeX, headX = hinge * (w / 2 - 0.25), -hinge * (w / 2 - 0.2)
+	timber("GateStile", V(hingeX, -h / 2, 0), V(hingeX, h / 2, 0), 0.5)
+	timber("GateStile", V(headX, -h / 2, 0), V(headX, h / 2 - 0.2, 0), 0.4)
+	for k = 0, 4 do
+		local y = -h / 2 + 0.35 + k * (h - 0.8) / 4
+		timber("GateBar", V(hingeX, y, 0), V(headX, y, 0), 0.3)
+	end
+	timber("GateBrace", V(hingeX, -h / 2 + 0.35, 0), V(headX, h / 2 - 0.45, 0), 0.28)
+	for _, d in door:GetDescendants() do
+		if d:IsA("BasePart") and (d.Name == "Knob" or d.Name == "Rose") then
+			d.Color = IRON
+		end
+	end
+	return door
+end
+
+--[[
+	A scarecrow on its cross: a sack for a head with the face stitched on and
+	tipped to one side, a hat, a coat stuffed with straw that pokes out of
+	the cuffs, trousers hanging empty. It looks toward -Z.
+]]
+function Yard.scarecrow(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Scarecrow", at, parent)
+	local wood = Kit.weathered(TIMBER, 0.08)
+	local coat = Kit.weathered(rgb(52, 44, 36), 0.06)
+	local hat = rgb(36, 30, 26)
+	local armY = 7.2
+	b.rod("ScarecrowPost", V(0, -SINK - 0.6, 0.2), V(0, 9.2, 0.2), 0.5, wood, M.Wood)
+	b.rod("ScarecrowArm", V(-3.4, armY, 0.2), V(3.4, armY, 0.2), 0.4, wood, M.Wood)
+	b.box("Coat", V(2.0, 3.0, 1.1), V(0, armY - 1.0, 0), coat, M.Fabric)
+	fine(
+		b.box(
+			"CoatTail",
+			V(2.2, 1.4, 0.9),
+			V(0, armY - 3.1, 0.05),
+			coat,
+			M.Fabric,
+			CFrame.Angles(0.08, 0, 0)
+		)
+	)
+	local wear = Kit.wear()
+	for _, sx in { -1, 1 } do
+		fine(b.box("Sleeve", V(2.4, 0.9, 0.9), V(sx * 2.1, armY, 0.1), coat, M.Fabric))
+		for k = 1, 4 do
+			fine(
+				b.box(
+					"Straw",
+					V(0.9, 0.06, 0.06),
+					V(sx * 3.5, armY + wear:NextNumber(-0.3, 0.3), 0.1 + wear:NextNumber(-0.3, 0.3)),
+					HAY,
+					M.Grass,
+					CFrame.Angles(
+						0,
+						wear:NextNumber(-0.5, 0.5),
+						sx * wear:NextNumber(0.2, 0.9) + k * 0.1
+					)
+				)
+			)
+		end
+		fine(
+			b.box(
+				"Trouser",
+				V(0.8, 2.6, 0.8),
+				V(sx * 0.5, armY - 3.6, 0),
+				rgb(46, 42, 38),
+				M.Fabric
+			)
+		)
+	end
+	-- The head, tipped over to one side.
+	local head =
+		draw(b.model, b.at * CFrame.new(0, armY + 1.7, 0) * CFrame.Angles(0, 0, math.rad(14)))
+	head.ball("SackHead", V(0, 0, 0), 1.9, Kit.weathered(BURLAP, 0.05), M.Fabric)
+	for _, sx in { -1, 1 } do
+		for _, turn in { 0.8, -0.8 } do
+			fine(
+				head.box(
+					"Stitch",
+					V(0.36, 0.07, 0.05),
+					V(sx * 0.38, 0.18, -0.88),
+					CARVED,
+					M.Fabric,
+					CFrame.Angles(0, 0, turn)
+				)
+			)
+		end
+	end
+	fine(head.box("Mouth", V(0.9, 0.08, 0.05), V(0, -0.35, -0.9), CARVED, M.Fabric))
+	fine(head.disc("Twine", V(0, -0.75, 0), 1.3, 0.15, TWINE, M.Fabric))
+	head.disc("HatBrim", V(0, 0.72, 0), 2.8, 0.1, hat, M.Fabric)
+	head.rod("HatCrown", V(0, 0.72, 0), V(0, 1.55, 0), 1.3, hat, M.Fabric)
+	return b.model
+end
+
+--[[
+	A milk churn: a tall can with a rounded shoulder, a neck and a lid, two
+	handles at the shoulder, a band round its foot.
+]]
+function Yard.churn(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("MilkChurn", at, parent)
+	local metal = Kit.weathered(opt(o, "metal", rgb(66, 64, 60)), 0.06)
+	b.disc("ChurnBody", V(0, 1.0, 0), 1.5, 2.0, metal, M.Metal)
+	b.ball("ChurnShoulder", V(0, 2.0, 0), 1.5, metal, M.Metal)
+	b.rod("ChurnNeck", V(0, 2.3, 0), V(0, 3.2, 0), 0.8, metal, M.Metal)
+	fine(b.disc("ChurnLid", V(0, 3.25, 0), 1.0, 0.15, metal, M.Metal))
+	fine(b.ball("ChurnKnob", V(0, 3.4, 0), 0.25, metal, M.Metal))
+	for _, sx in { -1, 1 } do
+		fine(
+			b.rod(
+				"ChurnHandle",
+				V(sx * 0.6, 2.55, -0.2),
+				V(sx * 0.6, 2.55, 0.2),
+				0.12,
+				IRON,
+				M.Metal
+			)
+		)
+	end
+	fine(b.disc("ChurnBand", V(0, 0.15, 0), 1.6, 0.25, metal, M.Metal))
+	return b.model
+end
+
+--[[
+	A bale of hay: a block tied with two twines, or `round`, a roll lying on
+	its side with its axis along X.
+]]
+function Yard.hayBale(at: CFrame, parent: Instance, o: Options?): Model
+	local hay = Kit.weathered(opt(o, "hay", HAY), 0.08)
+	if opt(o, "round", false) then
+		local b = begin("RoundBale", at, parent)
+		local d: number = opt(o, "diameter", 5)
+		local w: number = opt(o, "width", 4.6)
+		b.rod("RoundBale", V(-w / 2, d / 2, 0), V(w / 2, d / 2, 0), d, hay, M.Grass)
+		local face = Color3.new(hay.R * 0.8, hay.G * 0.8, hay.B * 0.8)
+		for _, x in { -w / 2 - 0.02, w / 2 + 0.02 } do
+			fine(b.disc("BaleEnd", V(x, d / 2, 0), d * 0.8, 0.04, face, M.Grass, SIDEWAYS))
+		end
+		return b.model
+	end
+	local b = begin("HayBale", at, parent)
+	local L, W, H = 3.4, 1.8, 1.5
+	b.box("HayBale", V(L, H, W), V(0, H / 2, 0), hay, M.Grass)
+	for _, x in { -L / 4, L / 4 } do
+		fine(b.box("Twine", V(0.08, H + 0.04, W + 0.04), V(x, H / 2, 0), TWINE, M.Fabric))
+	end
+	return b.model
+end
+
+--[[
+	Bales stacked `cols` along X, `rows` deep and `layers` high, none quite
+	square on the one below, the top course short a few. Twine shows only on
+	the bales whose faces can be seen.
+]]
+function Yard.hayStack(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("HayStack", at, parent)
+	local cols: number = opt(o, "cols", 3)
+	local rows: number = opt(o, "rows", 2)
+	local layers: number = opt(o, "layers", 3)
+	local L, W, H = 3.4, 1.8, 1.5
+	local wear = Kit.wear()
+	for k = 0, layers - 1 do
+		for i = 0, cols - 1 do
+			for j = 0, rows - 1 do
+				if k == layers - 1 and k > 0 and wear:NextNumber() < 0.3 then
+					continue
+				end
+				local pos = V((i - (cols - 1) / 2) * L, k * H + H / 2, (j - (rows - 1) / 2) * W)
+				local yaw = CFrame.Angles(0, wear:NextNumber(-0.04, 0.04), 0)
+				b.box(
+					"HayBale",
+					V(L - 0.06, H - 0.02, W - 0.06),
+					pos,
+					Kit.weathered(HAY, 0.08),
+					M.Grass,
+					yaw
+				)
+				if j == 0 or k == layers - 1 then
+					for _, x in { -L / 4, L / 4 } do
+						fine(
+							b.box(
+								"Twine",
+								V(0.08, H, W - 0.02),
+								pos + V(x, 0.01, 0),
+								TWINE,
+								M.Fabric,
+								yaw
+							)
+						)
+					end
+				end
+			end
+		end
+	end
+	return b.model
+end
+
+--[[
+	A hay wagon: a flat bed on four spoked wheels, big at the back, ladder
+	racks at the ends, a tongue down on the ground out front, old hay on it.
+	There is room to crawl under the bed between the axles: a hiding place.
+	It runs along Z with the tongue toward -Z.
+]]
+function Yard.wagon(at: CFrame, parent: Instance, o: Options?): (Model, Kit.HidingSpot)
+	local b = begin("HayWagon", at, parent)
+	local wood = Kit.weathered(TIMBER, 0.06)
+	local L, W, bedY = 11, 5.2, 3.6
+	local rearZ, frontZ = L / 2 - 2.2, -L / 2 + 2.0
+	local function wheel(x: number, z: number, d: number)
+		local hub = V(x, d / 2, z)
+		local r = d / 2 - 0.15
+		local n = 12
+		for k = 0, n - 1 do
+			local a0, a1 = 2 * math.pi * k / n, 2 * math.pi * (k + 1) / n
+			fine(
+				b.rod(
+					"WheelRim",
+					hub + V(0, r * math.cos(a0), r * math.sin(a0)),
+					hub + V(0, r * math.cos(a1), r * math.sin(a1)),
+					0.3,
+					wood,
+					M.Wood
+				)
+			)
+		end
+		for k = 0, 7 do
+			local a = 2 * math.pi * k / 8
+			fine(
+				b.rod(
+					"WheelSpoke",
+					hub,
+					hub + V(0, (r - 0.1) * math.cos(a), (r - 0.1) * math.sin(a)),
+					0.16,
+					wood,
+					M.Wood
+				)
+			)
+		end
+		b.disc("WheelHub", hub, 0.8, 0.7, IRON, M.Metal, SIDEWAYS)
+	end
+	for _, sx in { -1, 1 } do
+		wheel(sx * (W / 2 + 0.35), rearZ, 4.4)
+		wheel(sx * (W / 2 + 0.35), frontZ, 3.4)
+	end
+	for _, axle in { { z = rearZ, y = 2.2 }, { z = frontZ, y = 1.7 } } do
+		b.rod(
+			"Axle",
+			V(-W / 2 - 0.35, axle.y, axle.z),
+			V(W / 2 + 0.35, axle.y, axle.z),
+			0.4,
+			IRON,
+			M.Metal
+		)
+		b.box(
+			"Bolster",
+			V(W - 0.4, bedY - 0.4 - (axle.y + 0.2), 0.6),
+			V(0, (axle.y + 0.2 + bedY - 0.4) / 2, axle.z),
+			wood,
+			M.Wood
+		)
+	end
+	b.box("WagonBed", V(W, 0.4, L), V(0, bedY - 0.2, 0), wood, M.WoodPlanks)
+	for _, sx in { -1, 1 } do
+		b.box(
+			"WagonSide",
+			V(0.25, 0.9, L),
+			V(sx * (W / 2 - 0.125), bedY + 0.45, 0),
+			wood,
+			M.WoodPlanks
+		)
+	end
+	for _, sz in { -1, 1 } do
+		local z = sz * (L / 2 - 0.2)
+		for _, sx in { -1, 1 } do
+			fine(
+				b.rod(
+					"RackPost",
+					V(sx * (W / 2 - 0.3), bedY, z),
+					V(sx * (W / 2 - 0.1), bedY + 4.2, z),
+					0.3,
+					wood,
+					M.Wood
+				)
+			)
+		end
+		for k = 1, 3 do
+			fine(
+				b.rod(
+					"RackRung",
+					V(-(W / 2 - 0.2), bedY + k * 1.3, z),
+					V(W / 2 - 0.2, bedY + k * 1.3, z),
+					0.22,
+					wood,
+					M.Wood
+				)
+			)
+		end
+	end
+	b.rod("Tongue", V(0, 1.7, frontZ), V(0, 0.25, -L / 2 - 6), 0.4, wood, M.Wood)
+	fine(
+		b.rod(
+			"Whiffletree",
+			V(-1.6, 0.35, -L / 2 - 5.2),
+			V(1.6, 0.35, -L / 2 - 5.2),
+			0.3,
+			wood,
+			M.Wood
+		)
+	)
+	-- What is left of the last load.
+	local wear = Kit.wear()
+	for k, pos in { V(-1.1, bedY + 0.75, 2.6), V(1.1, bedY + 0.75, 2.4), V(0.2, bedY + 2.25, 2.5) } do
+		local yaw =
+			CFrame.Angles(0, math.pi / 2 + wear:NextNumber(-0.1, 0.1), if k == 3 then 0.08 else 0)
+		b.box("HayBale", V(3.4, 1.5, 1.8), pos, Kit.weathered(HAY, 0.08), M.Grass, yaw)
+	end
+	b.box(
+		"LooseHay",
+		V(3.8, 0.8, 3.0),
+		V(0, bedY + 0.4, -2.4),
+		Kit.weathered(HAY, 0.1),
+		M.Grass,
+		CFrame.Angles(0, 0.3, 0.05)
+	)
+	local spot = Kit.hideVolume(
+		"UnderWagonHidingVolume",
+		at * CFrame.new(0, 1.3, (rearZ + frontZ) / 2),
+		V(W - 1, 2.2, rearZ - frontZ - 1.4),
+		"UnderTable",
+		1,
+		b.model
+	)
+	return b.model, spot
+end
+
+--[[
+	A cast-iron pump behind a stone trough: the barrel and its cap, a spout
+	out over the water and the long handle left raised. The water in the
+	trough is black and does not move.
+]]
+function Yard.pumpTrough(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("PumpAndTrough", at, parent)
+	local stone = Kit.weathered(rgb(74, 72, 68), 0.05)
+	local L, W, H = 7, 2.6, 2.2
+	local tz = -1.95
+	b.box("TroughBottom", V(L, 0.4 + SINK, W), V(0, (0.4 - SINK) / 2, tz), stone, M.Concrete)
+	for _, sx in { -1, 1 } do
+		b.box(
+			"TroughEnd",
+			V(0.4, H + SINK, W),
+			V(sx * (L / 2 - 0.2), (H - SINK) / 2, tz),
+			stone,
+			M.Concrete
+		)
+	end
+	for _, sz in { -1, 1 } do
+		b.box(
+			"TroughSide",
+			V(L - 0.8, H + SINK, 0.4),
+			V(0, (H - SINK) / 2, tz + sz * (W / 2 - 0.2)),
+			stone,
+			M.Concrete
+		)
+	end
+	fine(b.box("TroughWater", V(L - 0.8, 0.05, W - 0.8), V(0, H - 0.5, tz), DARK_WATER, M.Glass))
+	local iron = Kit.weathered(IRON, 0.06)
+	b.disc("PumpBase", V(0, 0.2, 0), 1.3, 0.4, iron, M.Metal)
+	b.rod("PumpBarrel", V(0, 0.2, 0), V(0, 4.4, 0), 0.8, iron, M.Metal)
+	fine(b.disc("PumpCap", V(0, 4.5, 0), 1.0, 0.25, iron, M.Metal))
+	fine(b.ball("PumpFinial", V(0, 4.75, 0), 0.4, iron, M.Metal))
+	fine(b.rod("PumpSpout", V(0, 3.4, -0.3), V(0, 3.0, -1.7), 0.3, iron, M.Metal))
+	fine(b.rod("PumpBracket", V(0, 4.3, 0.3), V(0, 4.9, 0.7), 0.2, iron, M.Metal))
+	fine(b.rod("PumpHandle", V(0, 4.9, 0.7), V(0, 6.2, 3.2), 0.22, iron, M.Metal))
+	fine(b.ball("PumpHandleEnd", V(0, 6.2, 3.2), 0.35, iron, M.Metal))
+	return b.model
+end
+
+--[[
+	A well gone dry: a round stone parapet, the shaft under it lined with the
+	same stone down to a floor of mud, and bones on the mud. Two posts carry
+	a little roof and the windlass, its rope run out into the shaft to the
+	bucket. The shaft is a GroundCut, dug by Groundwork, and shallow enough
+	that anyone who climbs in can jump back out.
+]]
+function Yard.well(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Well", at, parent)
+	local stone: Color3 = opt(o, "stone", WALL_STONE)
+	local r, n = 2.2, 12
+	local top, bottom = 2.4, -3.6
+	unseen(b.box("GroundCut", V(6.4, 5.2, 6.4), V(0, -2.0, 0), EARTH, M.Ground))
+	local chord = 2 * (r + 0.3) * math.sin(math.pi / n) + 0.1
+	for k = 0, n - 1 do
+		local a = 2 * math.pi * k / n
+		local d = V(math.cos(a), 0, math.sin(a))
+		b.box(
+			"WellStone",
+			V(chord, top - bottom, 0.6),
+			d * (r + 0.3) + V(0, (top + bottom) / 2, 0),
+			Kit.weathered(stone, 0.06),
+			M.Cobblestone,
+			CFrame.new(Vector3.zero, d)
+		)
+	end
+	b.box("Mud", V(2 * r, 0.3, 2 * r), V(0, bottom - 0.15, 0), rgb(34, 28, 22), M.Ground)
+	fine(b.ball("Skull", V(0.5, bottom + 0.35, -0.3), 0.7, C.BONE, M.SmoothPlastic))
+	fine(b.box("Jaw", V(0.45, 0.15, 0.4), V(0.5, bottom + 0.1, -0.62), C.BONE, M.SmoothPlastic))
+	fine(
+		b.rod(
+			"Bone",
+			V(-1.0, bottom + 0.1, 0.4),
+			V(0.4, bottom + 0.12, 1.1),
+			0.2,
+			C.BONE,
+			M.SmoothPlastic
+		)
+	)
+	fine(
+		b.rod(
+			"Bone",
+			V(-0.6, bottom + 0.12, -1.0),
+			V(0.3, bottom + 0.1, -0.2),
+			0.2,
+			C.BONE,
+			M.SmoothPlastic
+		)
+	)
+	-- The posts, the windlass and its crank, the rope and the bucket.
+	local postX = r + 0.9
+	for _, sx in { -1, 1 } do
+		b.rod("WellPost", V(sx * postX, -SINK, 0), V(sx * postX, 6.4, 0), 0.5, TIMBER, M.Wood)
+	end
+	fine(b.rod("Windlass", V(-postX, 4.4, 0), V(postX, 4.4, 0), 0.5, TIMBER, M.Wood))
+	fine(b.rod("Crank", V(postX + 0.3, 4.4, 0), V(postX + 0.3, 3.6, 0.3), 0.14, IRON, M.Metal))
+	fine(b.rod("Crank", V(postX + 0.3, 3.6, 0.3), V(postX + 0.9, 3.6, 0.3), 0.18, TIMBER, M.Wood))
+	fine(b.rod("WellRope", V(0.3, 4.2, 0), V(0.3, 1.3, 0), 0.1, TWINE, M.Fabric))
+	fine(b.disc("Bucket", V(0.3, 0.8, 0), 0.9, 1.0, TIMBER, M.WoodPlanks))
+	-- A little roof over it, two slopes of boards.
+	local ridge, eave, half = 7.6, 6.1, 2.4
+	local slope = math.atan((ridge - eave) / half)
+	for _, sz in { -1, 1 } do
+		b.box(
+			"WellRoof",
+			V(2 * postX + 1.4, 0.25, math.sqrt(half * half + (ridge - eave) ^ 2) + 0.2),
+			V(0, (ridge + eave) / 2 + 0.12, sz * half / 2),
+			Kit.weathered(TIMBER, 0.08),
+			M.WoodPlanks,
+			CFrame.Angles(sz * slope, 0, 0)
+		)
+	end
+	fine(
+		b.rod(
+			"WellRidge",
+			V(-postX - 0.7, ridge + 0.2, 0),
+			V(postX + 0.7, ridge + 0.2, 0),
+			0.4,
+			TIMBER,
+			M.Wood
+		)
+	)
+	return b.model
+end
+
+--[[
+	A cow's skull, the kind nailed up on a gatepost. Its pivot is where it
+	sits on the post top, and it looks toward -Z.
+]]
+function Yard.cowSkull(at: CFrame, parent: Instance): Model
+	local b = begin("CowSkull", at, parent)
+	local bone = Kit.weathered(C.BONE, 0.05)
+	fine(b.ball("Cranium", V(0, 0.45, 0.1), 0.9, bone, M.SmoothPlastic))
+	fine(
+		b.box(
+			"Snout",
+			V(0.5, 0.45, 1.3),
+			V(0, 0.3, -0.6),
+			bone,
+			M.SmoothPlastic,
+			CFrame.Angles(-0.25, 0, 0)
+		)
+	)
+	for _, sx in { -1, 1 } do
+		fine(
+			b.disc(
+				"EyeSocket",
+				V(sx * 0.28, 0.55, -0.32),
+				0.3,
+				0.05,
+				CARVED,
+				M.SmoothPlastic,
+				UPRIGHT
+			)
+		)
+		fine(
+			b.rod(
+				"Horn",
+				V(sx * 0.35, 0.7, 0.15),
+				V(sx * 1.0, 0.9, 0.1),
+				0.22,
+				bone,
+				M.SmoothPlastic
+			)
+		)
+		fine(
+			b.rod(
+				"Horn",
+				V(sx * 1.0, 0.9, 0.1),
+				V(sx * 1.25, 1.35, -0.05),
+				0.16,
+				bone,
+				M.SmoothPlastic
+			)
+		)
+	end
+	return b.model
+end
+
+--[[
+	A row of dead corn from `at` along its +X for `length`: tall dry stalks
+	in two staggered lines with leaves hanging off them, and an unseen board
+	down the row so nobody walks through it. What a maze is made of.
+]]
+function Yard.cornRow(at: CFrame, length: number, parent: Instance, o: Options?)
+	local p = pen(at, parent)
+	local rng = Random.new(opt(o, "seed", 1))
+	local h: number = opt(o, "height", 9)
+	local n = math.max(2, math.floor(length / 1.5))
+	for i = 0, n - 1 do
+		local x = (i + 0.5) * length / n + rng:NextNumber(-0.2, 0.2)
+		local z = (if i % 2 == 0 then -0.35 else 0.35) + rng:NextNumber(-0.1, 0.1)
+		local foot = V(x, -0.3, z)
+		local tip = V(
+			x + rng:NextNumber(-0.4, 0.4),
+			h * rng:NextNumber(0.8, 1.1),
+			z + rng:NextNumber(-0.4, 0.4)
+		)
+		fine(p.rod("CornStalk", foot, tip, 0.24, Kit.weathered(DRY_STALK, 0.1), M.Grass))
+		-- Two leaves on opposite sides, each out from the stalk and hanging,
+		-- the way dead corn leaves do.
+		local yaw = rng:NextNumber(0, 2 * math.pi)
+		for k = 1, 2 do
+			local from = foot:Lerp(
+				tip,
+				if k == 1 then rng:NextNumber(0.35, 0.5) else rng:NextNumber(0.6, 0.78)
+			)
+			local a = yaw + (k - 1) * math.pi
+			local droop = rng:NextNumber(0.35, 0.85)
+			local out =
+				V(math.cos(a) * math.cos(droop), -math.sin(droop), math.sin(a) * math.cos(droop))
+			local len = rng:NextNumber(2.0, 2.8)
+			fine(
+				p.box(
+					"CornLeaf",
+					V(len, 0.05, 0.42),
+					from + out * (len / 2),
+					Kit.weathered(DRY_LEAF, 0.12),
+					M.Grass,
+					CFrame.fromMatrix(Vector3.zero, out, (Vector3.yAxis - out * out.Y).Unit)
+				)
+			)
+		end
+		-- The tassel on top of every other stalk, and an ear left on some.
+		if i % 2 == 0 then
+			fine(
+				p.rod(
+					"CornTassel",
+					tip,
+					tip + V(rng:NextNumber(-0.3, 0.3), 1.0, rng:NextNumber(-0.3, 0.3)),
+					0.1,
+					Kit.weathered(DRY_STALK, 0.1),
+					M.Grass
+				)
+			)
+		end
+		if rng:NextNumber() < 0.3 then
+			local from = foot:Lerp(tip, 0.5)
+			local a = yaw + math.pi / 2
+			fine(
+				p.rod(
+					"CornEar",
+					from,
+					from + V(math.cos(a) * 0.5, 0.8, math.sin(a) * 0.5),
+					0.36,
+					Kit.weathered(rgb(90, 74, 44), 0.1),
+					M.Grass
+				)
+			)
+		end
+	end
+	blocker(p.box("CornCore", V(length, h, 1.3), V(length / 2, h / 2, 0), DRY_STALK, M.Grass))
 end
 
 return Yard
