@@ -31,7 +31,7 @@ local PIVOT = CFrame.new(0, 0, -170) * CFrame.Angles(0, math.rad(0), 0)
 
 -- Houses that can be inserted by hand, by the name their model file gives
 -- them. A model under any other name is left alone.
-local PLACEABLE = { "Manor", "Villa", "Lodge" }
+local PLACEABLE = { "Manor", "Villa", "Lodge", "Church", "Farm" }
 
 -- How long to keep looking for the ground, and for the scenery, before giving
 -- up on each.

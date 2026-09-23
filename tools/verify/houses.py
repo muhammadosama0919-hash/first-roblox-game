@@ -223,3 +223,76 @@ HOUSES["Lodge"] = dict(
         ],
     ),
 )
+
+# --------------------------------------------------------------------------
+# The church and its churchyard
+# --------------------------------------------------------------------------
+
+_BELFRY = 36
+
+HOUSES["Church"] = dict(
+    G=2,
+    bounds=dict(x=(-72, 66), y=(-4, 100), z=(-98, 76)),
+    seed=(0, -2, 42),
+    floors=[("nave", 0), ("belfry", _BELFRY)],
+    inside=(0, 0, 10),
+    targets=[
+        ("west steps foot", (0, -2, 38)),
+        ("nave, by the west door", (0, 0, 24)),
+        ("nave, middle aisle", (0, 0, 4)),
+        ("north aisle", (-11.5, 0, 0)),
+        ("south aisle", (11.5, 0, -4)),
+        ("under the chancel arch", (0, 0, -27)),
+        ("chancel", (0, 0.8, -33)),
+        ("sanctuary", (0, 1.6, -46)),
+        ("vestry", (-11.5, 0, -40)),
+        ("outside the vestry door", (-10, -2, -49)),
+        ("porch", (21, 0, 14)),
+        ("porch steps foot", (30, -2, 14)),
+        ("tower, by the door", (-19, 0, 23)),
+        ("tower stair, first corner", (-29.25, 4.5, 28.25)),
+        ("tower stair, third corner", (-18.75, 13.5, 17.75)),
+        ("tower stair, sixth corner", (-29.25, 27, 17.75)),
+        ("belfry", (-24, _BELFRY, 28.2)),
+        ("belfry, by the bell", (-29.5, _BELFRY, 27)),
+        ("the lane, outside the lych-gate", (0, -2, 72)),
+        ("under the lych-gate", (0, -2, 66)),
+        ("churchyard, north side", (-52, -2, 0)),
+        ("churchyard, south side", (46, -2, 0)),
+        ("behind the chancel", (0, -2, -70)),
+        ("by the open grave", (13, -2, -63)),
+        ("mausoleum steps", (44, -2, -66)),
+        ("the fields, through the wicket gate", (-10, -2, -96)),
+        ("outside, through the fallen wall", (-70, -2, -27)),
+    ],
+    forbidden=[
+        ("lych-gate roof", (0, 9.9, 63.5)),
+        ("mausoleum roof", (41, 11.6, -76.7)),
+        ("nave roof", (4, 37.2, 0)),
+        ("south aisle roof", (12, 19.9, 0)),
+        ("north aisle roof", (-12, 19.9, -8)),
+        ("chancel roof", (3, 31, -40)),
+        ("tower top", (-32, 53, 15.5)),
+        ("porch roof", (21, 11.9, 11)),
+        ("vestry roof", (-12, 13.3, -36)),
+    ],
+    views=dict(
+        cut=[("11-cut-ground.png", 9.5), ("12-cut-belfry.png", _BELFRY + 9)],
+        eye=[
+            ("20-nave.png", (0, 4.6, 26), (0, 6, -40)),
+            ("21-chancel-west.png", (0, 5.4, -44), (0, 9, 20)),
+            ("22-north-aisle.png", (-11.5, 4.6, 26), (-10, 5, -22)),
+            ("23-tower-well.png", (-19, 4.6, 29), (-24, 30, 22)),
+            ("24-belfry.png", (-18.5, _BELFRY + 4.6, 28.5), (-26, _BELFRY + 6, 21)),
+            ("25-porch.png", (24, 4.6, 14), (14, 5, 14)),
+            ("26-vestry.png", (-9.5, 4.6, -30), (-14, 3, -42)),
+            ("27-sanctuary.png", (4, 5.4, -30), (-2, 6, -50)),
+            ("28-lychgate.png", (0, 2.6, 78), (0, 4, 30)),
+            ("29-graves-south.png", (50, 2.6, 34), (38, 1, -40)),
+            ("30-mausoleum.png", (34, 2.6, -58), (44, 5, -80)),
+            ("31-open-grave.png", (5, 3.4, -61), (14, -3, -72)),
+            ("32-graves-north.png", (-38, 2.6, 60), (-56, 1, -30)),
+            ("33-behind-chancel.png", (26, 4.6, -52), (-20, 2, -80)),
+        ],
+    ),
+)

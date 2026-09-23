@@ -240,7 +240,12 @@ def verify(rbxmx, cap, root, material_values, quiet=False):
         if not bucket:
             problems.append(f"{cls} {name} at {np.round(pos, 2).tolist()} is in the file but not in the capture")
             continue
-        p = bucket.pop()
+        # Parts can share a class, name, position and size and differ only in
+        # how they are turned, like the two wedges of neighbouring faces of a
+        # pyramid that meet at its corner: pair each with the one it is
+        # turned like, so the rotation check compares like with like.
+        p = min(bucket, key=lambda q: float(np.abs(R - q.R).max()))
+        bucket.remove(p)
         checked += 1
         worst_rot = max(worst_rot, float(np.abs(R - p.R).max()))
 

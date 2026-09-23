@@ -12,7 +12,8 @@ Checks a captured house must pass beyond walkability.
   - Every door swings clear: each is turned from shut to fully open in small
     steps, and its leaf may not pass through anything solid on the way.
   - No furniture is pushed into the building: every piece's parts are tested
-    against every wall, floor and stair.
+    against every wall, floor and stair, and outside against the walls,
+    gates and buildings of the grounds.
   - No wall inside meets an outside wall across a window.
 
 Each finding names the parts involved, so the fix can be found by name.
@@ -34,7 +35,10 @@ LININGS = {"Wallpaper", "Dado", "ChairRail", "Skirting", "Cornice"}
 FRAMES = {"Jamb", "Lintel", "Sill", "Mullion", "Bar", "BarStrap"}
 THROUGH_ROOF = {"Ceiling", "RoofSlope", "RoofBoards", "ChimneyLintel"}
 FLAT_ON_FLOOR = {"Rug", "RugBorder", "RugMedallion", "Worn", "Flags", "Tiles", "Tile", "Stain", "Smear", "Hole",
-                 "Runner", "Ashes", "Hearth"}
+                 "Runner", "Ashes", "Hearth", "Path"}
+# What furniture is tested against: the building, and outside it the walls,
+# gates, paths and small buildings of its grounds.
+STRUCTURE_FOLDERS = ("Shell", "Interior", "Grounds")
 
 
 # --------------------------------------------------------------------------
@@ -196,7 +200,7 @@ def main():
 
     # ---- furniture pushed into the building
     arch = [p for p in parts if p.furniture is None and p.door is None and p.transparency < 0.9
-            and folder_of(p) in ("Shell", "Interior") and p.name not in FLAT_ON_FLOOR]
+            and folder_of(p) in STRUCTURE_FOLDERS and p.name not in FLAT_ON_FLOOR]
     arch_boxes = [(p, part_box(p, 0.0)) for p in arch]
     rows = []
     seen = set()

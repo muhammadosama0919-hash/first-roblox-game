@@ -29,7 +29,7 @@ HOUSES = (HERE / "../../src/server/Houses").resolve()
 WORK = HERE / "work"
 
 # Shared modules, in dependency order. Each house is spliced after them.
-SHARED = ["HouseKit", "Furnish", "Decor"]
+SHARED = ["HouseKit", "Furnish", "Decor", "Yard"]
 
 PROLOGUE = """--!nocheck
 local shim = (function()

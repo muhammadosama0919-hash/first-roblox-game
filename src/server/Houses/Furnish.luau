@@ -80,16 +80,12 @@ export type Builder = {
 export type Options = { [string]: any }
 
 --[[
-	Start a piece: a Model with its pivot on the floor at `at`, and drawing
-	functions that take coordinates in the piece's own space.
+	Drawing functions that put parts into `model` at coordinates in the frame
+	`at`. `begin` uses it for a new piece; a piece can also call it again
+	with a frame of its own for a part of itself that is turned as a whole,
+	like a headstone leaning on its foot.
 ]]
-function Furnish.begin(name: string, at: CFrame, parent: Instance): Builder
-	local model = Instance.new("Model")
-	model.Name = name
-	model.WorldPivot = at
-	CollectionService:AddTag(model, "Furniture")
-	model.Parent = parent
-
+function Furnish.draw(model: Model, at: CFrame): Builder
 	local b: Builder = {
 		model = model,
 		at = at,
@@ -161,6 +157,19 @@ function Furnish.begin(name: string, at: CFrame, parent: Instance): Builder
 		end,
 	}
 	return b
+end
+
+--[[
+	Start a piece: a Model with its pivot on the floor at `at`, and drawing
+	functions that take coordinates in the piece's own space.
+]]
+function Furnish.begin(name: string, at: CFrame, parent: Instance): Builder
+	local model = Instance.new("Model")
+	model.Name = name
+	model.WorldPivot = at
+	CollectionService:AddTag(model, "Furniture")
+	model.Parent = parent
+	return Furnish.draw(model, at)
 end
 
 local begin = Furnish.begin
@@ -3455,6 +3464,1122 @@ function Furnish.stumpTable(at: CFrame, parent: Instance, o: Options?): Model
 	fine(b.disc("Rings", V(0, h + 0.01, 0), d - 0.5, 0.03, Kit.rgb(86, 66, 48), M.Wood))
 	fine(b.disc("Heart", V(0, h + 0.02, 0), 0.9, 0.03, Kit.rgb(58, 42, 30), M.Wood))
 	return b.model
+end
+
+----------------------------------------------------------------------------
+-- The church
+----------------------------------------------------------------------------
+
+--[[
+	A pew: a plank seat, a panelled back with a book ledge on it for the row
+	behind, and a bench end each side standing up past the back with a
+	carved poppyhead on top, which here is a ball. Its front, where you sit,
+	faces -Z like every piece.
+]]
+function Furnish.pew(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Pew", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local L: number = opt(o, "length", 5)
+	local seatY, seatD, backTop = 1.9, 1.5, 3.7
+	local inner = L - 0.56
+	local endD = seatD + 1.0
+	local endZ = 0.2
+
+	b.box("Seat", V(inner, 0.25, seatD), V(0, seatY - 0.125, -0.05), wood, M.WoodPlanks)
+	fine(
+		b.rod(
+			"SeatEdge",
+			V(-inner / 2, seatY - 0.13, -seatD / 2 - 0.05),
+			V(inner / 2, seatY - 0.13, -seatD / 2 - 0.05),
+			0.3,
+			wood,
+			M.Wood
+		)
+	)
+	b.box(
+		"PewBack",
+		V(inner, backTop - seatY + 0.25, 0.22),
+		V(0, (seatY + backTop) / 2 - 0.1, seatD / 2 + 0.02),
+		wood,
+		M.WoodPlanks
+	)
+	fine(
+		b.rod(
+			"BackRail",
+			V(-inner / 2, backTop + 0.02, seatD / 2 + 0.02),
+			V(inner / 2, backTop + 0.02, seatD / 2 + 0.02),
+			0.36,
+			wood,
+			M.Wood
+		)
+	)
+	-- The ledge on the back, where the row behind kept its books.
+	b.box("BookLedge", V(inner, 0.14, 0.7), V(0, backTop - 0.5, seatD / 2 + 0.47), wood, M.Wood)
+	fine(
+		b.rod(
+			"LedgeLip",
+			V(-inner / 2, backTop - 0.38, seatD / 2 + 0.8),
+			V(inner / 2, backTop - 0.38, seatD / 2 + 0.8),
+			0.16,
+			wood,
+			M.Wood
+		)
+	)
+	-- A kneeler rail along the floor behind, for the row behind.
+	fine(
+		b.rod(
+			"Kneeler",
+			V(-inner / 2, 0.32, seatD / 2 + 0.72),
+			V(inner / 2, 0.32, seatD / 2 + 0.72),
+			0.3,
+			wood,
+			M.Wood
+		)
+	)
+	for _, s in { -1, 1 } do
+		local x = s * (L / 2 - 0.14)
+		b.box("PewEnd", V(0.28, backTop + 0.2, endD), V(x, (backTop + 0.2) / 2, endZ), wood, M.Wood)
+		fine(
+			b.rod(
+				"PewEndRoll",
+				V(x, backTop + 0.2, endZ - endD / 2),
+				V(x, backTop + 0.2, endZ + endD / 2),
+				0.32,
+				wood,
+				M.Wood
+			)
+		)
+		fine(b.disc("PoppyNeck", V(x, backTop + 0.4, -seatD / 2 + 0.1), 0.42, 0.3, wood, M.Wood))
+		fine(b.ball("Poppyhead", V(x, backTop + 0.72, -seatD / 2 + 0.1), 0.72, wood, M.Wood))
+	end
+	-- A hymn book or two left behind.
+	local wear = Kit.wear()
+	if wear:NextNumber() < 0.5 then
+		fine(
+			b.box(
+				"HymnBook",
+				V(0.7, 0.18, 0.5),
+				V(wear:NextNumber(-inner / 2 + 0.6, inner / 2 - 0.6), seatY + 0.09, -0.2),
+				Kit.rgb(40, 26, 24),
+				M.Fabric,
+				CFrame.Angles(0, wear:NextNumber(-0.6, 0.6), 0)
+			)
+		)
+	end
+	return b.model
+end
+
+--[[
+	The altar: a heavy oak table on turned legs, a frontal of dark velvet
+	hanging down its front with a band of tarnished gold braid, the linen
+	on its top gone brown. A cross on a stepped base in the middle, a
+	candlestick either side, the book open. Open underneath behind the
+	frontal: a player can get under it and lie still.
+]]
+function Furnish.altar(at: CFrame, parent: Instance, o: Options?): (Model, Kit.HidingSpot?)
+	local b = begin("Altar", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local cloth: Color3 = opt(o, "cloth", C.VELVET_DARK)
+	local L, W, H = 7.2, 3.0, 3.6
+	b.box("AltarTop", V(L, 0.35, W), V(0, H - 0.175, 0), wood, M.Wood)
+	for _, x in { -1, 1 } do
+		for _, z in { -1, 1 } do
+			turnedLeg(b, x * (L / 2 - 0.4), z * (W / 2 - 0.35), H - 0.35, 0.42, wood)
+		end
+	end
+	fine(b.box("BackRail", V(L - 1.2, 0.5, 0.2), V(0, H - 0.6, W / 2 - 0.35), wood, M.Wood))
+	-- The frontal, down the front to a hand's breadth from the floor. It does
+	-- not collide: it is cloth.
+	soft(
+		b.box(
+			"Frontal",
+			V(L - 0.3, H - 0.55, 0.08),
+			V(0, (H - 0.55) / 2 + 0.3, -W / 2 - 0.06),
+			cloth,
+			M.Fabric
+		)
+	)
+	fine(
+		b.box(
+			"Orphrey",
+			V(0.8, H - 0.55, 0.1),
+			V(0, (H - 0.55) / 2 + 0.3, -W / 2 - 0.12),
+			C.BRASS,
+			M.Fabric
+		)
+	)
+	fine(
+		b.rod(
+			"Fringe",
+			V(-(L - 0.3) / 2, 0.36, -W / 2 - 0.1),
+			V((L - 0.3) / 2, 0.36, -W / 2 - 0.1),
+			0.2,
+			C.BRASS,
+			M.Fabric
+		)
+	)
+	soft(b.box("FairLinen", V(L + 0.5, 0.05, W - 0.5), V(0, H + 0.025, 0.15), C.LINEN, M.Fabric))
+	for _, x in { -1, 1 } do
+		soft(
+			b.box(
+				"LinenFall",
+				V(0.05, 1.2, W - 0.5),
+				V(x * (L / 2 + 0.27), H - 0.55, 0.15),
+				C.LINEN,
+				M.Fabric
+			)
+		)
+	end
+
+	-- The cross on its stepped base.
+	local brass = C.BRASS
+	fine(b.box("CrossBase", V(1.3, 0.3, 0.9), V(0, H + 0.2, 0.55), brass, M.Metal))
+	fine(b.box("CrossStep", V(0.8, 0.3, 0.6), V(0, H + 0.5, 0.55), brass, M.Metal))
+	fine(b.box("CrossShaft", V(0.24, 2.6, 0.2), V(0, H + 1.95, 0.55), brass, M.Metal))
+	fine(b.box("CrossArm", V(1.3, 0.24, 0.2), V(0, H + 2.55, 0.55), brass, M.Metal))
+	-- Candlesticks, one candle burnt low and one snapped.
+	for i, x in { -2.5, 2.5 } do
+		fine(b.disc("CandleFoot", V(x, H + 0.1, 0.5), 0.9, 0.2, brass, M.Metal))
+		fine(b.rod("CandleStem", V(x, H + 0.15, 0.5), V(x, H + 1.9, 0.5), 0.22, brass, M.Metal))
+		fine(b.ball("CandleKnop", V(x, H + 0.9, 0.5), 0.42, brass, M.Metal))
+		fine(b.disc("DripPan", V(x, H + 1.92, 0.5), 0.6, 0.08, brass, M.Metal))
+		local len = if i == 1 then 1.3 else 0.35
+		fine(
+			b.rod(
+				"Candle",
+				V(x, H + 1.95, 0.5),
+				V(x, H + 1.95 + len, 0.5),
+				0.26,
+				C.WAX,
+				M.SmoothPlastic
+			)
+		)
+	end
+	-- The book, open where it was left.
+	for _, s in { -1, 1 } do
+		fine(
+			b.box(
+				"BookPage",
+				V(0.8, 0.16, 1.1),
+				V(s * 0.42 + 1.2, H + 0.1, -0.5),
+				Kit.rgb(60, 52, 42),
+				M.Fabric,
+				CFrame.Angles(0, 0, s * math.rad(-5))
+			)
+		)
+	end
+
+	local spot: Kit.HidingSpot? = nil
+	if opt(o, "hide", true) then
+		spot = Kit.hideVolume(
+			"UnderAltarHidingVolume",
+			at * CFrame.new(0, (H - 0.6) / 2 + 0.05, 0.05),
+			V(L - 1.6, H - 0.7, W - 1.1),
+			"UnderTable",
+			opt(o, "floor", 1),
+			b.model
+		)
+	end
+	return b.model, spot
+end
+
+--[[
+	A run of altar rail: a round top rail on turned balusters between two
+	posts, and a long cushion to kneel on along the front, the velvet
+	flattened into two hollows at every place. `length` along X.
+]]
+function Furnish.altarRail(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("AltarRail", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local L: number = opt(o, "length", 5)
+	local H = 2.7
+	b.box("RailTop", V(L, 0.22, 0.7), V(0, H - 0.11, 0), wood, M.Wood)
+	fine(
+		b.rod("RailRoll", V(-L / 2, H + 0.02, -0.12), V(L / 2, H + 0.02, -0.12), 0.36, wood, M.Wood)
+	)
+	b.box("RailFoot", V(L, 0.3, 0.6), V(0, 0.15, 0), wood, M.Wood)
+	for _, x in { -L / 2 + 0.25, L / 2 - 0.25 } do
+		b.box("RailPost", V(0.5, H + 0.2, 0.6), V(x, (H + 0.2) / 2, 0), wood, M.Wood)
+		fine(b.ball("PostCap", V(x, H + 0.45, 0), 0.55, wood, M.Wood))
+	end
+	local n = math.max(2, math.floor(L / 0.8))
+	for i = 1, n - 1 do
+		local x = -L / 2 + L * i / n
+		fine(b.rod("Baluster", V(x, 0.3, 0), V(x, H - 0.22, 0), 0.24, wood, M.Wood))
+		fine(b.ball("BalusterKnop", V(x, 0.95, 0), 0.4, wood, M.Wood))
+	end
+	soft(b.box("Kneeler", V(L - 0.3, 0.35, 1.1), V(0, 0.18, -1.05), C.VELVET_DARK, M.Fabric))
+	fine(
+		b.rod(
+			"KneelerRoll",
+			V(-(L - 0.3) / 2, 0.3, -1.6),
+			V((L - 0.3) / 2, 0.3, -1.6),
+			0.32,
+			C.VELVET_DARK,
+			M.Fabric
+		)
+	)
+	return b.model
+end
+
+--[[
+	A pulpit: a round drum of boards on a stem and a corbel, a book desk on
+	its front, a sounding board hung over it on a post from the back, and a
+	short straight stair up its left side into a gap in the drum. The stair
+	and the floor inside collide; the preacher's place can be stood in.
+]]
+function Furnish.pulpit(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Pulpit", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local floorH, drumH, R = 3.6, 3.4, 1.8
+	fine(b.disc("PulpitBase", V(0, 0.2, 0), 2.2, 0.4, wood, M.Wood))
+	b.rod("PulpitStem", V(0, 0.3, 0), V(0, floorH - 0.7, 0), 1.3, wood, M.Wood)
+	fine(b.ball("StemKnop", V(0, 1.4, 0), 1.7, wood, M.Wood))
+	b.disc("Corbel", V(0, floorH - 0.55, 0), 2.7, 0.4, wood, M.Wood)
+	b.disc("PulpitFloor", V(0, floorH - 0.15, 0), R * 2, 0.3, wood, M.Wood)
+	-- The drum: twelve boards round the circle, leaving a gap on the left
+	-- where the stair comes in.
+	local n = 12
+	for k = 0, n - 1 do
+		local a = 2 * math.pi * (k + 0.5) / n
+		local x, z = R * math.sin(a), R * math.cos(a)
+		if x < -1.2 and math.abs(z) < 1.3 then
+			continue
+		end
+		b.box(
+			"DrumBoard",
+			V(2 * R * math.sin(math.pi / n) + 0.06, drumH, 0.22),
+			V(x, floorH + drumH / 2, z),
+			wood,
+			M.WoodPlanks,
+			CFrame.Angles(0, a, 0)
+		)
+		local a1 = 2 * math.pi * (k + 1.5) / n
+		fine(
+			b.rod(
+				"DrumRail",
+				V(x, floorH + drumH + 0.05, z),
+				V(R * math.sin(a1), floorH + drumH + 0.05, R * math.cos(a1)),
+				0.3,
+				wood,
+				M.Wood
+			)
+		)
+	end
+	-- The book desk and the book.
+	fine(
+		b.box(
+			"BookDesk",
+			V(1.6, 0.12, 1.0),
+			V(0, floorH + drumH + 0.25, -R + 0.35),
+			wood,
+			M.Wood,
+			CFrame.Angles(math.rad(18), 0, 0)
+		)
+	)
+	fine(
+		b.box(
+			"PulpitBook",
+			V(1.4, 0.14, 0.9),
+			V(0, floorH + drumH + 0.38, -R + 0.37),
+			Kit.rgb(44, 30, 26),
+			M.Fabric,
+			CFrame.Angles(math.rad(18), 0, 0)
+		)
+	)
+	-- The sounding board, on a post up the back.
+	b.rod("TesterPost", V(0, floorH, R + 0.15), V(0, floorH + 7.6, R + 0.15), 0.4, wood, M.Wood)
+	b.disc("SoundingBoard", V(0, floorH + 7.5, 0), 4.6, 0.3, wood, M.Wood)
+	fine(b.disc("SoundingCrown", V(0, floorH + 7.8, 0), 3.2, 0.4, wood, M.Wood))
+	fine(b.ball("SoundingFinial", V(0, floorH + 8.3, 0), 0.6, wood, M.Wood))
+	-- The stair: four steps up the left side, from behind.
+	local sx = -(R + 0.1 + 0.9)
+	for k = 1, 4 do
+		local top = floorH * k / 4
+		local z1 = R + 1.8 - 0.7 * (k - 1)
+		local z0 = z1 - 0.7
+		b.box("PulpitStep", V(1.8, top, z1 - z0), V(sx, top / 2, (z0 + z1) / 2), wood, M.WoodPlanks)
+	end
+	b.box(
+		"PulpitStepTop",
+		V(1.8, floorH, 0.9),
+		V(sx, floorH / 2, R + 1.8 - 2.8 - 0.45),
+		wood,
+		M.WoodPlanks
+	)
+	fine(
+		b.rod(
+			"StairRail",
+			V(sx - 0.9, floorH / 4 + 2.8, R + 1.8),
+			V(sx - 0.9, floorH + 2.8, -0.2),
+			0.3,
+			wood,
+			M.Wood
+		)
+	)
+	for _, z in { R + 1.8, -0.2 } do
+		local y = if z > 0 then floorH / 4 else floorH
+		fine(
+			b.rod(
+				"StairPost",
+				V(sx - 0.9, y - floorH / 4, z),
+				V(sx - 0.9, y + 2.9, z),
+				0.36,
+				wood,
+				M.Wood
+			)
+		)
+	end
+	return b.model
+end
+
+--[[
+	A lectern in the shape of an eagle, in brass gone brown: a round foot, a
+	column with a knop, a globe, and the eagle standing on it with its wings
+	spread back into a sloping desk and the book open on them.
+]]
+function Furnish.eagleLectern(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Lectern", at, parent)
+	local metal: Color3 = opt(o, "metal", C.BRASS)
+	fine(b.disc("LecternFoot", V(0, 0.15, 0), 1.9, 0.3, metal, M.Metal))
+	for k = 0, 2 do
+		local a = 2 * math.pi * k / 3
+		fine(
+			b.ball("LecternToe", V(1.0 * math.cos(a), 0.2, 1.0 * math.sin(a)), 0.42, metal, M.Metal)
+		)
+	end
+	b.rod("LecternColumn", V(0, 0.3, 0), V(0, 3.4, 0), 0.45, metal, M.Metal)
+	fine(b.ball("LecternKnop", V(0, 1.8, 0), 0.75, metal, M.Metal))
+	fine(b.ball("LecternGlobe", V(0, 3.7, 0), 1.1, metal, M.Metal))
+	local by = 4.45
+	b.rod("EagleBody", V(0, by - 0.05, 0.55), V(0, by + 0.2, -0.55), 0.9, metal, M.Metal)
+	fine(b.ball("EagleHead", V(0, by + 0.6, -0.8), 0.56, metal, M.Metal))
+	fine(b.rod("EagleBeak", V(0, by + 0.6, -1.05), V(0, by + 0.42, -1.35), 0.18, metal, M.Metal))
+	for _, s in { -1, 1 } do
+		fine(
+			b.box(
+				"EagleWing",
+				V(1.15, 0.12, 1.6),
+				V(s * 0.62, by + 0.45, 0.15),
+				metal,
+				M.Metal,
+				CFrame.Angles(math.rad(-24), 0, s * math.rad(-10))
+			)
+		)
+		fine(
+			b.box(
+				"BookPage",
+				V(0.9, 0.12, 1.2),
+				V(s * 0.5, by + 0.7, 0.18),
+				Kit.rgb(60, 52, 42),
+				M.Fabric,
+				CFrame.Angles(math.rad(-24), 0, s * math.rad(-6))
+			)
+		)
+	end
+	fine(
+		b.box(
+			"EagleTail",
+			V(0.5, 0.1, 0.8),
+			V(0, by - 0.1, 0.95),
+			metal,
+			M.Metal,
+			CFrame.Angles(math.rad(22), 0, 0)
+		)
+	)
+	return b.model
+end
+
+--[[
+	A stone font by the door: a round bowl on a stem, on a step, full to
+	the rim with water gone black, and its wooden cover pushed half off.
+]]
+function Furnish.font(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Font", at, parent)
+	local stone: Color3 = opt(o, "stone", Kit.rgb(78, 74, 68))
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	b.disc("FontStep", V(0, 0.2, 0), 4.4, 0.4, stone, M.Concrete)
+	b.disc("FontBase", V(0, 0.6, 0), 2.4, 0.4, stone, M.Concrete)
+	b.rod("FontStem", V(0, 0.7, 0), V(0, 2.4, 0), 1.3, stone, M.Concrete)
+	b.disc("FontBowl", V(0, 2.95, 0), 3.0, 1.3, stone, M.Concrete)
+	b.disc("FontRim", V(0, 3.62, 0), 3.2, 0.2, stone, M.Concrete)
+	fine(b.disc("FontWater", V(0, 3.73, 0), 2.5, 0.03, Kit.rgb(22, 26, 24), M.Glass))
+	b.disc(
+		"FontCover",
+		V(1.0, 3.98, 0.35),
+		2.9,
+		0.25,
+		wood,
+		M.Wood,
+		CFrame.Angles(0, 0, math.rad(7))
+	)
+	fine(b.rod("CoverSpire", V(1.05, 4.1, 0.35), V(1.2, 5.4, 0.35), 0.35, wood, M.Wood))
+	fine(b.ball("CoverFinial", V(1.22, 5.55, 0.35), 0.5, wood, M.Wood))
+	return b.model
+end
+
+--[[
+	A chamber organ: a tall case with a console in front, two keyboards and
+	the stop knobs either side, a bench, and the pipes standing in three
+	flats above on the impost, the tallest in the middle. The case is hollow
+	and there is a door in its side: a player can get in behind the pipes
+	and shut it. `doorSide` is which side the door is on, -1 or +1 along X.
+]]
+function Furnish.organ(at: CFrame, parent: Instance, o: Options?): (Model, Kit.HidingSpot)
+	local b = begin("Organ", at, parent)
+	local wood: Color3 = opt(o, "wood", C.WALNUT)
+	local pipeColor: Color3 = opt(o, "pipes", Kit.rgb(74, 70, 62))
+	local side: number = opt(o, "doorSide", -1)
+	local W, D, H = 5.2, 5.2, 12
+	local t = 0.3
+	local impost = 4.7
+	local dz0, dz1 = -1.1, D / 2 - t - 0.05 -- the door's opening along the side
+	local doorH = 7.0
+
+	b.box("CaseFloor", V(W, 0.3, D), V(0, 0.15, 0), wood, M.Wood)
+	b.box("CaseBack", V(W, H, t), V(0, H / 2, D / 2 - t / 2), wood, M.WoodPlanks)
+	-- The top overhangs the front and sides but stops at the back, so the
+	-- case stands flush to a wall.
+	b.box("CaseTop", V(W + 0.2, 0.5, D + 0.4), V(0, H + 0.25, -0.1), wood, M.Wood)
+	fine(
+		b.rod(
+			"CaseCornice",
+			V(-W / 2 - 0.1, H + 0.05, -D / 2 - 0.3),
+			V(W / 2 + 0.1, H + 0.05, -D / 2 - 0.3),
+			0.45,
+			wood,
+			M.Wood
+		)
+	)
+	-- Sides: whole on one side, round a door on the other.
+	for _, s in { -1, 1 } do
+		local x = s * (W / 2 - t / 2)
+		if s ~= side then
+			b.box("CaseSide", V(t, H, D), V(x, H / 2, 0), wood, M.WoodPlanks)
+		else
+			local front = dz0 - (-D / 2)
+			b.box("CaseSide", V(t, H, front), V(x, H / 2, -D / 2 + front / 2), wood, M.WoodPlanks)
+			local back = D / 2 - dz1
+			if back > 0.05 then
+				b.box("CaseSide", V(t, H, back), V(x, H / 2, dz1 + back / 2), wood, M.WoodPlanks)
+			end
+			b.box(
+				"CaseSide",
+				V(t, H - doorH - 0.3, dz1 - dz0),
+				V(x, 0.3 + doorH + (H - doorH - 0.3) / 2, (dz0 + dz1) / 2),
+				wood,
+				M.WoodPlanks
+			)
+		end
+	end
+	-- The console: the lower front, the keyboards, the stops, the music desk.
+	b.box(
+		"ConsoleFront",
+		V(W - 2 * t, impost - 0.6, t),
+		V(0, 0.3 + (impost - 0.6) / 2, -D / 2 + t / 2),
+		wood,
+		M.WoodPlanks
+	)
+	local keys = Kit.rgb(70, 64, 52) -- ivory, yellowed to the colour of old teeth
+	for i, k in { { 2.5, -D / 2 - 0.55 }, { 2.95, -D / 2 - 0.2 } } do
+		fine(b.box("KeyDesk", V(W - 2.0, 0.25, 0.7), V(0, k[1], k[2]), wood, M.Wood))
+		fine(
+			b.box(
+				"Keys",
+				V(W - 2.2, 0.08, 0.55),
+				V(0, k[1] + 0.16, k[2] - 0.05),
+				keys,
+				M.SmoothPlastic
+			)
+		)
+		if i == 1 then
+			b.box("KeyCheek", V(W - 1.6, 0.9, 1.2), V(0, 2.0, -D / 2 - 0.35), wood, M.Wood)
+		end
+	end
+	for _, s in { -1, 1 } do
+		for k = 0, 3 do
+			fine(
+				b.ball(
+					"StopKnob",
+					V(s * (W / 2 - 0.55), 3.0 + k * 0.35, -D / 2 - 0.05),
+					0.24,
+					keys,
+					M.Wood
+				)
+			)
+		end
+	end
+	fine(
+		b.box(
+			"MusicDesk",
+			V(2.4, 1.2, 0.1),
+			V(0, 3.9, -D / 2 - 0.05),
+			wood,
+			M.Wood,
+			CFrame.Angles(math.rad(-12), 0, 0)
+		)
+	)
+	for k = 0, 6 do
+		fine(
+			b.rod(
+				"Pedal",
+				V(-1.5 + k * 0.5, 0.2, -D / 2 - 1.5),
+				V(-1.5 + k * 0.5, 0.2, -D / 2 - 0.4),
+				0.22,
+				wood,
+				M.Wood
+			)
+		)
+	end
+	-- The bench in front of the console.
+	b.box("OrganBench", V(3.6, 0.3, 1.1), V(0, 2.0, -D / 2 - 2.3), wood, M.Wood)
+	for _, x in { -1.5, 1.5 } do
+		fine(b.rod("BenchLeg", V(x, 0, -D / 2 - 2.3), V(x, 1.85, -D / 2 - 2.3), 0.3, wood, M.Wood))
+	end
+	-- The impost the pipes stand on, and the board behind them that keeps
+	-- the inside of the case dark.
+	b.box("Impost", V(W - 2 * t, 0.4, 1.2), V(0, impost - 0.2, -D / 2 + 0.6), wood, M.Wood)
+	b.box(
+		"PipeBoard",
+		V(W - 2 * t, H - impost, 0.2),
+		V(0, impost + (H - impost) / 2, -D / 2 + 1.3),
+		wood,
+		M.WoodPlanks
+	)
+	-- The pipes: a middle flat of seven rising to the centre and a flat of
+	-- four either side falling away.
+	local function pipe(x: number, len: number, d: number)
+		local foot = impost + 0.9
+		fine(
+			b.rod(
+				"PipeFoot",
+				V(x, impost, -D / 2 + 0.6),
+				V(x, foot, -D / 2 + 0.6),
+				d * 0.55,
+				pipeColor,
+				M.Metal
+			)
+		)
+		b.rod(
+			"Pipe",
+			V(x, foot, -D / 2 + 0.6),
+			V(x, foot + len, -D / 2 + 0.6),
+			d,
+			pipeColor,
+			M.Metal
+		)
+		fine(
+			b.box(
+				"PipeMouth",
+				V(d * 0.55, 0.3, 0.06),
+				V(x, foot + 0.25, -D / 2 + 0.6 - d / 2),
+				Kit.rgb(20, 18, 16),
+				M.Metal
+			)
+		)
+	end
+	for k = -2, 2 do
+		pipe(k * 0.62, 5.6 - math.abs(k) * 0.6, 0.52)
+	end
+	for _, s in { -1, 1 } do
+		pipe(s * 1.95, 3.7, 0.42)
+		pipe(s * 2.35, 3.1, 0.38)
+	end
+	-- The door into the case, hung on its back edge and opening out.
+	local dx = side * (W / 2 - t / 2)
+	local centre = V(dx, 0.3 + doorH / 2, (dz0 + dz1) / 2)
+	-- Hung on its back edge unless `hingeFront`, for a case whose back edge
+	-- stands too near something for the leaf to clear it.
+	Kit.door(at * CFrame.new(centre, centre + V(side, 0, 0)), dz1 - dz0, doorH, {
+		parent = b.model,
+		hinge = if opt(o, "hingeFront", false) then -side else side,
+		swing = 1,
+		thickness = 0.22,
+		color = wood,
+		panel = C.WALNUT,
+		style = "cabinet",
+		openAngle = 90,
+		gap = 0.08,
+		name = "OrganDoor",
+	})
+	return b.model,
+		Kit.hideVolume(
+			"OrganHidingVolume",
+			at * CFrame.new(0, 0.3 + 3.1, (dz0 + dz1) / 2 + 0.1),
+			V(W - 1.2, 6.0, dz1 - dz0 - 0.5),
+			"Cupboard",
+			opt(o, "floor", 1),
+			b.model
+		)
+end
+
+--[[
+	A confessional in three parts: the priest's box in the middle behind a
+	door, and a curtained booth either side where the penitent kneels at a
+	grille in the wall between. A pediment over the door, a smaller one over
+	each booth, a cornice and ball finials along the top.
+
+	Only the middle door swings, and it is narrower than the gap between two
+	column plinths: a booth standing in an aisle bay has the columns right in
+	front of its ends, and any door hung there hits one as it opens. The
+	priest's box is the hiding place. A curtain is not a door, so the booths
+	either side are not.
+]]
+function Furnish.confessional(
+	at: CFrame,
+	parent: Instance,
+	o: Options?
+): (Model, { Kit.HidingSpot })
+	local b = begin("Confessional", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local dark: Color3 = opt(o, "panel", C.WALNUT)
+	local cloth: Color3 = opt(o, "curtain", C.VELVET_DARK)
+	-- Inside sizes: the priest's box, each penitent's booth, depth, height.
+	local cp, pw, cd, ch = 3.6, 2.3, 4.0, 7.6
+	local t = 0.3
+	local W = cp + pw * 2 + t * 4
+	local D = cd + t
+	local H = ch + 0.3
+	local openH = ch - 0.4 -- the door, and the booths' openings
+	local z0 = -D / 2 + t / 2 -- the front
+	local zBack = D / 2 + t / 2
+	local partition = cp / 2 + t / 2
+	-- The grille's opening in each partition, at a kneeling head's height.
+	local gy0, gy1, gz = 3.5, 5.1, 0.8
+
+	b.box("BoothFloor", V(W, 0.3, D), V(0, 0.15, t / 2), wood, M.Wood)
+	b.box("BoothBack", V(W, H, t), V(0, H / 2, D / 2), wood, M.WoodPlanks)
+	for _, s in { -1, 1 } do
+		b.box("BoothWall", V(t, H, D), V(s * (W / 2 - t / 2), H / 2, t / 2), wood, M.WoodPlanks)
+		-- The partition, whole but for the grille's opening.
+		local x = s * partition
+		b.box("BoothWall", V(t, gy0, D), V(x, gy0 / 2, t / 2), wood, M.WoodPlanks)
+		b.box("BoothWall", V(t, H - gy1, D), V(x, (gy1 + H) / 2, t / 2), wood, M.WoodPlanks)
+		b.box(
+			"BoothWall",
+			V(t, gy1 - gy0, -gz - z0),
+			V(x, (gy0 + gy1) / 2, (z0 - gz) / 2),
+			wood,
+			M.WoodPlanks
+		)
+		b.box(
+			"BoothWall",
+			V(t, gy1 - gy0, zBack - gz),
+			V(x, (gy0 + gy1) / 2, (gz + zBack) / 2),
+			wood,
+			M.WoodPlanks
+		)
+		for k = -2, 2 do
+			fine(b.rod("Grille", V(x, gy0, k * 0.3), V(x, gy1, k * 0.3), 0.08, C.IRON, M.Metal))
+		end
+		for k = 0, 3 do
+			fine(
+				b.rod(
+					"Grille",
+					V(x, gy0 + 0.2 + k * 0.4, -gz),
+					V(x, gy0 + 0.2 + k * 0.4, gz),
+					0.08,
+					C.IRON,
+					M.Metal
+				)
+			)
+		end
+	end
+	b.box("BoothRoof", V(W + 0.5, 0.35, D + 0.5), V(0, H + 0.175, t / 2), wood, M.Wood)
+	fine(
+		b.rod(
+			"BoothCornice",
+			V(-W / 2 - 0.25, H + 0.05, -D / 2 - 0.1),
+			V(W / 2 + 0.25, H + 0.05, -D / 2 - 0.1),
+			0.4,
+			wood,
+			M.Wood
+		)
+	)
+	for _, x in { -W / 2, -partition, partition, W / 2 } do
+		fine(b.ball("BoothFinial", V(x, H + 0.65, -D / 2 + 0.2), 0.6, wood, M.Wood))
+	end
+
+	-- Headers over the three openings, and a pediment over each: the
+	-- middle one, over the priest's door, the tallest.
+	local bays = { { x = 0, w = cp, apex = 1.4 } }
+	for _, s in { -1, 1 } do
+		table.insert(bays, { x = s * (partition + t / 2 + pw / 2), w = pw, apex = 0.9 })
+	end
+	for _, bay in bays do
+		b.box(
+			"BoothHeader",
+			V(bay.w, H - 0.3 - openH, t),
+			V(bay.x, (0.3 + openH + H) / 2, z0),
+			wood,
+			M.Wood
+		)
+		b.tri(
+			"Pediment",
+			V(bay.x - bay.w / 2, H + 0.35, -D / 2 + 0.25),
+			V(bay.x + bay.w / 2, H + 0.35, -D / 2 + 0.25),
+			V(bay.x, H + 0.35 + bay.apex, -D / 2 + 0.25),
+			0.3,
+			wood,
+			M.Wood
+		)
+	end
+
+	-- The priest's side: the door, and his seat hinged up flat against the
+	-- back, which leaves the box room enough to stand in.
+	local backFace = D / 2 - t / 2
+	b.box("BoothSeat", V(cp - 0.5, 1.3, 0.12), V(0, 2.65, backFace - 0.07), wood, M.Wood)
+	for _, s in { -1, 1 } do
+		fine(
+			b.box(
+				"SeatBracket",
+				V(0.12, 0.3, 0.35),
+				V(s * (cp / 2 - 0.6), 1.9, backFace - 0.18),
+				C.IRON,
+				M.Metal
+			)
+		)
+	end
+	local centre = V(0, 0.3 + openH / 2, z0)
+	Kit.door(at * CFrame.new(centre, centre + V(0, 0, -1)), cp, openH, {
+		parent = b.model,
+		hinge = -1,
+		swing = 1,
+		thickness = 0.22,
+		color = wood,
+		panel = dark,
+		style = "cabinet",
+		openAngle = opt(o, "openAngle", 85),
+		gap = 0.08,
+		name = "ConfessionalDoor",
+	})
+
+	-- The penitents' sides: a kneeler against the partition facing the
+	-- grille, an elbow rest under it, and the curtain half drawn across.
+	for _, s in { -1, 1 } do
+		local face = s * (partition + t / 2)
+		local xc = s * (partition + t / 2 + pw / 2)
+		b.box("Kneeler", V(0.8, 0.5, cd - 1.0), V(face + s * 0.45, 0.55, t / 2), dark, M.Wood)
+		b.box("ElbowRest", V(0.5, 0.15, 1.8), V(face + s * 0.27, 3.2, 0), wood, M.Wood)
+		fine(
+			b.rod(
+				"ElbowRestEdge",
+				V(face + s * 0.52, 3.2, -0.9),
+				V(face + s * 0.52, 3.2, 0.9),
+				0.2,
+				wood,
+				M.Wood
+			)
+		)
+		local rodY = 0.3 + openH - 0.15
+		local zc = z0 + 0.12
+		fine(
+			b.rod(
+				"CurtainRod",
+				V(xc - pw / 2, rodY, zc),
+				V(xc + pw / 2, rodY, zc),
+				0.1,
+				C.IRON,
+				M.Metal
+			)
+		)
+		-- Drawn toward the outer wall, in folds: strips turned a little
+		-- each way, so the light catches alternate ones.
+		local outer = xc + s * pw / 2
+		local cover = pw * 0.6
+		local folds = 4
+		local fw = cover / folds
+		for i = 1, folds do
+			local x = outer - s * (i - 0.5) * fw
+			local turn = if i % 2 == 0 then 0.35 else -0.35
+			soft(
+				b.box(
+					"Curtain",
+					V(fw / math.cos(turn), openH - 0.5, 0.08),
+					V(x, 0.3 + 0.35 + (openH - 0.5) / 2, zc + 0.08),
+					Kit.weathered(cloth, 0.08),
+					M.Fabric,
+					CFrame.Angles(0, turn, 0)
+				)
+			)
+		end
+	end
+
+	local hiding = Kit.hideVolume(
+		"ConfessionalHidingVolume",
+		at * CFrame.new(0, 0.3 + 3.1, t / 2 + 0.1),
+		V(cp - 0.6, 6.0, cd - 0.6),
+		"Cupboard",
+		opt(o, "floor", 1),
+		b.model
+	)
+	return b.model, { hiding }
+end
+
+--[[
+	A tomb chest with an effigy on it: a stone chest with round carved
+	panels down its sides, a knight lying on the lid with his hands together
+	and his head on a cushion, a dog at his feet. The lid has been pushed
+	aside a hand's width, and it is dark in the gap. The effigy lies along
+	Z, head toward +Z.
+]]
+function Furnish.tombChest(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("TombChest", at, parent)
+	local stone: Color3 = opt(o, "stone", Kit.rgb(74, 70, 64))
+	local L, W, H = 7.5, 3.0, 3.0
+	b.box("TombPlinth", V(W + 0.5, 0.4, L + 0.5), V(0, 0.2, 0), stone, M.Concrete)
+	b.box("TombChest", V(W, H - 0.9, L), V(0, 0.4 + (H - 0.9) / 2, 0), stone, M.Concrete)
+	for _, s in { -1, 1 } do
+		for k = -1, 1 do
+			fine(
+				b.disc(
+					"TombRoundel",
+					V(s * (W / 2 + 0.03), 0.4 + (H - 0.9) / 2, k * 2.3),
+					1.4,
+					0.1,
+					Kit.rgb(60, 57, 52),
+					M.Concrete,
+					CFrame.Angles(0, 0, math.pi / 2)
+				)
+			)
+			fine(
+				b.box(
+					"TombShield",
+					V(0.14, 0.7, 0.55),
+					V(s * (W / 2 + 0.06), 0.4 + (H - 0.9) / 2, k * 2.3),
+					Kit.rgb(48, 44, 40),
+					M.Concrete
+				)
+			)
+		end
+	end
+	-- The dark inside, showing where the lid has moved.
+	fine(
+		b.box(
+			"TombVoid",
+			V(W - 0.6, 0.1, L - 0.6),
+			V(0, H - 0.93, 0),
+			Kit.rgb(12, 11, 10),
+			M.SmoothPlastic
+		)
+	)
+	local lid = CFrame.new(0.55, 0, 0.2) * CFrame.Angles(0, math.rad(4), 0)
+	local function onLid(p: Vector3): Vector3
+		return (lid * CFrame.new(p)).Position
+	end
+	b.box(
+		"TombLid",
+		V(W + 0.3, 0.5, L + 0.3),
+		onLid(V(0, H - 0.65, 0)),
+		stone,
+		M.Concrete,
+		lid.Rotation
+	)
+	fine(
+		b.rod(
+			"LidRoll",
+			onLid(V(-(W + 0.3) / 2, H - 0.5, -(L + 0.3) / 2)),
+			onLid(V(-(W + 0.3) / 2, H - 0.5, (L + 0.3) / 2)),
+			0.3,
+			stone,
+			M.Concrete
+		)
+	)
+	-- The effigy.
+	local top = H - 0.4
+	fine(
+		b.box(
+			"EffigyCushion",
+			V(1.5, 0.35, 1.0),
+			onLid(V(0, top + 0.17, 2.9)),
+			stone,
+			M.Concrete,
+			lid.Rotation
+		)
+	)
+	fine(b.ball("EffigyHead", onLid(V(0, top + 0.72, 2.75)), 0.95, stone, M.Concrete))
+	b.rod(
+		"EffigyBody",
+		onLid(V(0, top + 0.62, 2.1)),
+		onLid(V(0, top + 0.5, -2.6)),
+		1.3,
+		stone,
+		M.Concrete
+	)
+	fine(
+		b.rod(
+			"EffigyHands",
+			onLid(V(0, top + 1.2, 0.9)),
+			onLid(V(0, top + 1.75, 1.05)),
+			0.3,
+			stone,
+			M.Concrete
+		)
+	)
+	for _, s in { -1, 1 } do
+		fine(b.ball("EffigyFoot", onLid(V(s * 0.3, top + 0.6, -2.95)), 0.55, stone, M.Concrete))
+	end
+	fine(b.ball("EffigyDog", onLid(V(0, top + 0.45, -3.45)), 0.8, stone, M.Concrete))
+	fine(b.ball("EffigyDogHead", onLid(V(0.35, top + 0.75, -3.5)), 0.45, stone, M.Concrete))
+	return b.model
+end
+
+--[[
+	A run of choir stalls: a pew with a higher back and a desk before it,
+	the desk's top sloping toward the singer, its front panelled.
+]]
+function Furnish.choirStall(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("ChoirStall", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local L: number = opt(o, "length", 6)
+	local seatY, backTop = 1.9, 5.2
+	b.box("Seat", V(L, 0.25, 1.4), V(0, seatY - 0.125, 0.2), wood, M.WoodPlanks)
+	fine(
+		b.rod(
+			"SeatEdge",
+			V(-L / 2, seatY - 0.13, -0.5),
+			V(L / 2, seatY - 0.13, -0.5),
+			0.3,
+			wood,
+			M.Wood
+		)
+	)
+	b.box("StallBack", V(L, backTop, 0.25), V(0, backTop / 2, 1.0), wood, M.WoodPlanks)
+	fine(
+		b.rod(
+			"StallCornice",
+			V(-L / 2, backTop + 0.1, 0.9),
+			V(L / 2, backTop + 0.1, 0.9),
+			0.45,
+			wood,
+			M.Wood
+		)
+	)
+	b.box("DeskFront", V(L, 2.9, 0.22), V(0, 1.45, -1.9), wood, M.WoodPlanks)
+	b.box(
+		"DeskTop",
+		V(L, 0.14, 0.9),
+		V(0, 3.05, -1.55),
+		wood,
+		M.Wood,
+		CFrame.Angles(math.rad(-14), 0, 0)
+	)
+	for _, s in { -1, 1 } do
+		local x = s * (L / 2 - 0.14)
+		b.box("StallEnd", V(0.28, 3.2, 3.2), V(x, 1.6, -0.45), wood, M.Wood)
+		fine(b.ball("Poppyhead", V(x, 3.55, -1.8), 0.7, wood, M.Wood))
+		fine(b.ball("Poppyhead", V(x, 3.55, 0.6), 0.7, wood, M.Wood))
+	end
+	-- Books on the desk, and one fallen.
+	fine(
+		b.box(
+			"PsalterBook",
+			V(0.8, 0.2, 0.6),
+			V(-L / 4, 3.2, -1.55),
+			Kit.rgb(40, 26, 24),
+			M.Fabric,
+			CFrame.Angles(math.rad(-14), 0.2, 0)
+		)
+	)
+	fine(
+		b.box(
+			"PsalterBook",
+			V(0.8, 0.2, 0.6),
+			V(L / 3, 0.12, -2.6),
+			Kit.rgb(34, 30, 40),
+			M.Fabric,
+			CFrame.Angles(0, 0.7, 0)
+		)
+	)
+	return b.model
+end
+
+--[[
+	A bier: two trestles and a pair of rails, with a coffin on it whose lid
+	is not quite on. Low enough underneath to crawl into, which is the last
+	place anyone would look. The coffin lies along X.
+]]
+function Furnish.bier(at: CFrame, parent: Instance, o: Options?): (Model, Kit.HidingSpot?)
+	local b = begin("Bier", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local coffinWood: Color3 = opt(o, "coffin", Kit.rgb(46, 32, 26))
+	local H = 2.7
+	for _, x in { -2.3, 2.3 } do
+		for _, z in { -1, 1 } do
+			fine(
+				b.rod("TrestleLeg", V(x, 0, z * 1.15), V(x, H - 0.3, z * 0.75), 0.35, wood, M.Wood)
+			)
+		end
+		fine(b.rod("TrestleBar", V(x, 1.0, -1.05), V(x, 1.0, 1.05), 0.25, wood, M.Wood))
+	end
+	for _, z in { -0.7, 0.7 } do
+		b.box("BierRail", V(6.2, 0.3, 0.4), V(0, H - 0.15, z), wood, M.Wood)
+	end
+	-- The coffin: wider at the shoulders, as they are made: a box and two
+	-- wedge-cut ends.
+	local cy = H + 0.65
+	b.box("Coffin", V(4.0, 1.3, 2.1), V(0.3, cy, 0), coffinWood, M.Wood)
+	b.box("CoffinFoot", V(1.6, 1.3, 1.4), V(-2.5, cy, 0), coffinWood, M.Wood)
+	b.box("CoffinHead", V(0.8, 1.3, 1.6), V(2.7, cy, 0), coffinWood, M.Wood)
+	-- The tapers from the shoulders to the foot and the head: flat triangles
+	-- in plan, as thick as the coffin is deep.
+	for _, s in { -1, 1 } do
+		b.tri(
+			"CoffinTaper",
+			V(-1.7, cy, s * 1.05),
+			V(-3.3, cy, s * 0.7),
+			V(-1.7, cy, s * 0.7),
+			1.3,
+			coffinWood,
+			M.Wood
+		)
+		b.tri(
+			"CoffinTaper",
+			V(2.3, cy, s * 1.05),
+			V(3.1, cy, s * 0.8),
+			V(2.3, cy, s * 0.8),
+			1.3,
+			coffinWood,
+			M.Wood
+		)
+	end
+	-- The lid, slid a little off toward the foot.
+	b.box(
+		"CoffinLid",
+		V(6.1, 0.22, 2.0),
+		V(-0.35, cy + 0.76, 0.12),
+		coffinWood,
+		M.Wood,
+		CFrame.Angles(0, math.rad(3), 0)
+	)
+	for _, x in { -1.3, 0.4, 2.0 } do
+		for _, s in { -1, 1 } do
+			fine(
+				b.rod(
+					"CoffinHandle",
+					V(x - 0.4, cy - 0.1, s * 1.15),
+					V(x + 0.4, cy - 0.1, s * 1.15),
+					0.14,
+					C.BRASS,
+					M.Metal
+				)
+			)
+		end
+	end
+	fine(b.box("CoffinPlate", V(1.0, 0.04, 0.6), V(0.8, cy + 0.89, 0.12), C.BRASS, M.Metal))
+
+	local spot: Kit.HidingSpot? = nil
+	if opt(o, "hide", true) then
+		spot = Kit.hideVolume(
+			"UnderBierHidingVolume",
+			at * CFrame.new(0, 1.2, 0),
+			V(4.0, 2.2, 1.4),
+			"UnderTable",
+			opt(o, "floor", 1),
+			b.model
+		)
+	end
+	return b.model, spot
 end
 
 return Furnish

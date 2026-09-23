@@ -442,6 +442,52 @@ function Kit.triangle(
 	return made
 end
 
+--[[
+	Fill the right triangle whose right angle is at `r`, with legs out to `p`
+	and `q` (world points), with one WedgePart.
+
+	A wedge's solid is the half of its box below the diagonal from its bottom
+	front edge to its top back edge, so its right angle is at the bottom of
+	its back face. The leg to `p` becomes the part's up axis and the leg to
+	`q` runs along its front-to-back axis, reversed; size and centre follow
+	from the two legs. Everything still comes from the points, as in
+	Kit.triangle, at half the parts when the right angle is already known.
+	Anything that is not a right angle at `r` goes to Kit.triangle instead.
+]]
+function Kit.rightTriangle(
+	name: string,
+	r: Vector3,
+	p: Vector3,
+	q: Vector3,
+	thickness: number,
+	color: Color3,
+	material: Enum.Material,
+	parent: Instance
+): { BasePart }
+	local up, along = p - r, q - r
+	local h, d = up.Magnitude, along.Magnitude
+	if h < EPS or d < EPS then
+		return {}
+	end
+	if math.abs(up:Dot(along)) > 1e-4 * h * d then
+		return Kit.triangle(name, r, p, q, thickness, color, material, parent)
+	end
+	local y = up / h
+	local z = -along / d
+	local wedge = Instance.new("WedgePart")
+	wedge.Name = name
+	wedge.Size = Vector3.new(thickness, h, d)
+	wedge.CFrame = CFrame.fromMatrix(r + up / 2 + along / 2, y:Cross(z), y, z)
+	wedge.Color = color
+	wedge.Material = material
+	wedge.Anchored = true
+	wedge.TopSurface = Enum.SurfaceType.Smooth
+	wedge.BottomSurface = Enum.SurfaceType.Smooth
+	wedge.Parent = parent
+	state.count += 1
+	return { wedge }
+end
+
 ----------------------------------------------------------------------------
 -- Rooms
 ----------------------------------------------------------------------------

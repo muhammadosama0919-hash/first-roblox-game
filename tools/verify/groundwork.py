@@ -9,9 +9,10 @@ generated, levels the ground under the house, stands the house on it and
 clears the trees out of it. None of that can be seen until the game runs, so
 this runs it: the unmodified script, under the Luau CLI, with the shim's
 Vector3 and CFrame, against a sloping terrain, a house turned 30 degrees and
-floating above it, trees in and out of its footprint, and one planted after
-the script has finished. Then it checks where the house ended up, what was
-dug and filled, and what was cleared.
+floating above it with a hole to dig (a GroundCut) inside it, trees in and
+out of its footprint, and one planted after the script has finished. Then
+it checks where the house ended up, what was dug and filled, and what was
+cleared.
 """
 import pathlib
 import subprocess
@@ -102,6 +103,23 @@ function house:IsA(c) return c == "Model" end
 function house:GetPivot() return pivot end
 function house:PivotTo(cf) pivot = cf; table.insert(moves, cf) end
 function house:GetBoundingBox() return pivot * CFrame.new(0, 15, 0), SIZE end
+-- Two parts inside it that move with it: an open grave's GroundCut, and a
+-- part that is not one.
+local CUT_AT, CUT_SIZE = CFrame.new(12, -2.5, -20), Vector3.new(5.6, 6.2, 9.6)
+local function housePart(name, offset, size, class)
+	return setmetatable({ Name = name, Size = size }, {
+		__index = function(t, k)
+			if k == "CFrame" then return pivot * offset end
+			if k == "IsA" then return function(_, c) return c == class or c == "BasePart" end end
+			return nil
+		end,
+	})
+end
+local descendants = {
+	housePart("Wall", CFrame.new(0, 5, 0), Vector3.new(10, 10, 1), "Part"),
+	housePart("GroundCut", CUT_AT, CUT_SIZE, "Part"),
+}
+function house:GetDescendants() return descendants end
 
 local Workspace = {}
 function Workspace:WaitForChild(name, timeout)
@@ -174,8 +192,8 @@ check(math.abs(moved.X - startPivot.X) < 1e-6 and math.abs(moved.Z - startPivot.
 local r0, r1 = startPivot.LookVector, moved.LookVector
 check((r0 - r1).Magnitude < 1e-9, "heading kept")
 
-check(#fills == 2, "two terrain fills")
-if #fills == 2 then
+check(#fills == 3, "three terrain fills: the pad's dig and fill, then the hole")
+if #fills >= 2 then
 	local dig, fill = fills[1], fills[2]
 	check(dig.material:find("Air") ~= nil and fill.material:find("Ground") ~= nil, "dug with Air, then filled with Ground")
 	-- dig spans pad .. high+8, fill spans low-8 .. pad, both across the footprint plus margin
@@ -188,6 +206,14 @@ if #fills == 2 then
 	check((dig.cf.LookVector - startPivot.LookVector).Magnitude < 1e-9, "pad turned with the house")
 	local c = startPivot * CFrame.new(0, 15, 0)
 	check(math.abs(dig.cf.X - c.X) < 1e-6 and math.abs(dig.cf.Z - c.Z) < 1e-6, "pad centred on the house")
+end
+if #fills == 3 then
+	local hole = fills[3]
+	local want = moved * CUT_AT
+	check(hole.material:find("Air") ~= nil, "the GroundCut dug with Air, after the pad")
+	check((hole.cf.Position - want.Position).Magnitude < 1e-6, "dug where the house stands now, not where it was")
+	check((hole.cf.LookVector - want.LookVector).Magnitude < 1e-9, "the hole turned with the house")
+	check((hole.size - CUT_SIZE).Magnitude < 1e-9, "the hole the GroundCut's size")
 end
 
 for _, b in before do

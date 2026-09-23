@@ -1447,4 +1447,309 @@ function Decor.potRack(at: CFrame, parent: Instance, o: Options?): Model
 	return b.model
 end
 
+----------------------------------------------------------------------------
+-- The church
+----------------------------------------------------------------------------
+
+--[[
+	A tall iron candle stand on three feet, the kind that stands at the end
+	of a pew row: a pricket at the top with a candle burnt down on it, wax
+	run down the stem. `at` is on the floor.
+]]
+function Decor.candleStand(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("CandleStand", at, parent)
+	local metal: Color3 = opt(o, "metal", C.IRON)
+	local h: number = opt(o, "height", 5.2)
+	local wear = Kit.wear()
+	for k = 0, 2 do
+		local a = 2 * math.pi * k / 3 + 0.4
+		b.rod(
+			"StandFoot",
+			V(0, 0.9, 0),
+			V(0.9 * math.cos(a), 0.05, 0.9 * math.sin(a)),
+			0.16,
+			metal,
+			M.Metal
+		)
+		fine(
+			b.ball(
+				"StandToe",
+				V(0.92 * math.cos(a), 0.08, 0.92 * math.sin(a)),
+				0.22,
+				metal,
+				M.Metal
+			)
+		)
+	end
+	b.rod("StandStem", V(0, 0.8, 0), V(0, h, 0), 0.2, metal, M.Metal)
+	fine(b.ball("StandKnop", V(0, h * 0.55, 0), 0.38, metal, M.Metal))
+	fine(b.disc("DripPan", V(0, h + 0.03, 0), 0.8, 0.08, metal, M.Metal))
+	local len = if opt(o, "stub", false) then 0.25 else wear:NextNumber(0.6, 1.4)
+	fine(b.rod("Candle", V(0, h + 0.06, 0), V(0, h + 0.06 + len, 0), 0.3, C.WAX, M.SmoothPlastic))
+	fine(b.rod("Drip", V(0.15, h + 0.05, 0), V(0.12, h - 0.6, 0.02), 0.08, C.WAX, M.SmoothPlastic))
+	return b.model
+end
+
+--[[
+	A hymn board on a wall: a board with a rounded top and four slots, the
+	numbers in them too dark to read. `at` is on the wall face, looking out.
+]]
+function Decor.hymnBoard(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("HymnBoard", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	b.box("HymnBoard", V(2.2, 3.4, 0.18), V(0, 0, -0.09), wood, M.Wood)
+	fine(b.disc("HymnBoardTop", V(0, 1.7, -0.09), 2.2, 0.18, wood, M.Wood, ON_WALL))
+	for k = 0, 3 do
+		fine(
+			b.box(
+				"HymnCard",
+				V(1.7, 0.58, 0.06),
+				V(0, 1.1 - k * 0.8, -0.2),
+				Kit.rgb(36, 32, 28),
+				M.Wood
+			)
+		)
+		fine(
+			b.box(
+				"HymnNumber",
+				V(0.9, 0.3, 0.04),
+				V(0.1, 1.1 - k * 0.8, -0.25),
+				Kit.rgb(62, 54, 40),
+				M.SmoothPlastic
+			)
+		)
+	end
+	return b.model
+end
+
+--[[
+	A memorial tablet on a wall: a slab of dark marble with a moulded
+	border, a cornice over it and an urn on the cornice.
+]]
+function Decor.memorial(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Memorial", at, parent)
+	local stone: Color3 = opt(o, "stone", Kit.rgb(52, 50, 48))
+	local w: number = opt(o, "width", 2.6)
+	local h: number = opt(o, "height", 1.9)
+	b.box("MemorialSlab", V(w, h, 0.18), V(0, 0, -0.09), stone, M.Marble)
+	for _, s in { -1, 1 } do
+		fine(
+			b.rod(
+				"MemorialBorder",
+				V(-w / 2, s * h / 2, -0.2),
+				V(w / 2, s * h / 2, -0.2),
+				0.16,
+				Kit.rgb(70, 66, 60),
+				M.Marble
+			)
+		)
+		fine(
+			b.rod(
+				"MemorialBorder",
+				V(s * w / 2, -h / 2, -0.2),
+				V(s * w / 2, h / 2, -0.2),
+				0.16,
+				Kit.rgb(70, 66, 60),
+				M.Marble
+			)
+		)
+	end
+	fine(
+		b.box(
+			"MemorialCornice",
+			V(w + 0.4, 0.25, 0.4),
+			V(0, h / 2 + 0.2, -0.2),
+			Kit.rgb(70, 66, 60),
+			M.Marble
+		)
+	)
+	fine(b.ball("MemorialUrn", V(0, h / 2 + 0.7, -0.22), 0.7, Kit.rgb(70, 66, 60), M.Marble))
+	fine(
+		b.rod(
+			"MemorialUrnFoot",
+			V(0, h / 2 + 0.3, -0.22),
+			V(0, h / 2 + 0.5, -0.22),
+			0.4,
+			Kit.rgb(70, 66, 60),
+			M.Marble
+		)
+	)
+	-- The inscription: lines of letters worn to shallow marks.
+	for k = 0, 3 do
+		fine(
+			b.box(
+				"Inscription",
+				V(w * (0.7 - (k % 2) * 0.15), 0.12, 0.03),
+				V(0, h / 2 - 0.45 - k * 0.38, -0.19),
+				Kit.rgb(36, 34, 32),
+				M.Marble
+			)
+		)
+	end
+	return b.model
+end
+
+--[[
+	A hatchment: a painted board hung corner-down on a wall, black ground,
+	a shield on it in faded colours, a frame round its four sides.
+]]
+function Decor.hatchment(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Hatchment", at, parent)
+	local s: number = opt(o, "size", 2.6)
+	local diamond = CFrame.Angles(0, 0, math.pi / 4)
+	b.box("HatchmentBoard", V(s, s, 0.14), V(0, 0, -0.07), Kit.rgb(26, 24, 24), M.Wood, diamond)
+	local r = s / math.sqrt(2)
+	local corners = { V(0, r, -0.18), V(r, 0, -0.18), V(0, -r, -0.18), V(-r, 0, -0.18) }
+	for k = 1, 4 do
+		fine(
+			b.rod(
+				"HatchmentFrame",
+				corners[k],
+				corners[k % 4 + 1],
+				0.2,
+				Kit.rgb(44, 34, 28),
+				M.Wood
+			)
+		)
+	end
+	fine(
+		b.box("HatchmentShield", V(0.5, 1.1, 0.05), V(-0.25, 0, -0.18), Kit.rgb(70, 30, 26), M.Wood)
+	)
+	fine(
+		b.box("HatchmentShield", V(0.5, 1.1, 0.05), V(0.25, 0, -0.18), Kit.rgb(34, 40, 64), M.Wood)
+	)
+	return b.model
+end
+
+--[[
+	A heap of fallen masonry: stones of every size come down from a wall or
+	a vault, some still square, the big ones solid underfoot. `at` is on the
+	floor at the middle of the heap.
+]]
+function Decor.rubble(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("Rubble", at, parent)
+	local stone: Color3 = opt(o, "stone", Kit.rgb(70, 66, 60))
+	local r: number = opt(o, "radius", 2.2)
+	local wear = Kit.wear()
+	local n = math.floor(r * 5)
+	for i = 1, n do
+		local a = wear:NextNumber(0, 2 * math.pi)
+		local d = r * math.sqrt(wear:NextNumber())
+		local size = wear:NextNumber(0.4, 1.3) * (1.2 - d / r * 0.6)
+		local x, z = d * math.cos(a), d * math.sin(a)
+		if i % 3 == 0 then
+			fine(
+				b.ball(
+					"Rubble",
+					V(x, size / 2 + 0.02, z),
+					size,
+					Kit.weathered(stone, 0.12),
+					M.Cobblestone
+				)
+			)
+		else
+			-- Stand each tipped stone on its lowest corner, which is this far
+			-- below its middle, so none is sunk into the floor it fell on.
+			local tip = CFrame.Angles(
+				wear:NextNumber(-0.3, 0.3),
+				wear:NextNumber(0, 3),
+				wear:NextNumber(-0.3, 0.3)
+			)
+			local half = V(size * 0.65, size * 0.35, size * 0.5)
+			local low = math.abs(tip.RightVector.Y) * half.X
+				+ math.abs(tip.UpVector.Y) * half.Y
+				+ math.abs(tip.LookVector.Y) * half.Z
+			local part = b.box(
+				"Rubble",
+				half * 2,
+				V(x, low + 0.02, z),
+				Kit.weathered(stone, 0.12),
+				M.Cobblestone,
+				tip
+			)
+			if size < 0.9 then
+				fine(part)
+			end
+		end
+	end
+	return b.model
+end
+
+--[[
+	A parish notice board: a framed board under a little pitched roof on the
+	wall, with notices pinned to it gone the colour of weak tea, and a
+	missing-person notice newer than the rest with its corner curling.
+	`at` is on the wall face, looking out.
+]]
+function Decor.noticeBoard(at: CFrame, parent: Instance, o: Options?): Model
+	local b = begin("NoticeBoard", at, parent)
+	local wood: Color3 = opt(o, "wood", C.OAK)
+	local w: number = opt(o, "width", 3.2)
+	local h: number = opt(o, "height", 2.4)
+	b.box("NoticeBoard", V(w, h, 0.2), V(0, 0, -0.1), Kit.rgb(40, 34, 30), M.Wood)
+	for _, s in { -1, 1 } do
+		fine(
+			b.rod(
+				"NoticeFrame",
+				V(-w / 2, s * h / 2, -0.22),
+				V(w / 2, s * h / 2, -0.22),
+				0.2,
+				wood,
+				M.Wood
+			)
+		)
+		fine(
+			b.rod(
+				"NoticeFrame",
+				V(s * w / 2, -h / 2, -0.22),
+				V(s * w / 2, h / 2, -0.22),
+				0.2,
+				wood,
+				M.Wood
+			)
+		)
+		fine(
+			b.box(
+				"NoticeRoof",
+				V(w / 2 + 0.25, 0.12, 0.8),
+				V(s * (w / 4 + 0.1), h / 2 + 0.35, -0.35),
+				wood,
+				M.Wood,
+				CFrame.Angles(0, 0, -s * math.rad(28))
+			)
+		)
+	end
+	local wear = Kit.wear()
+	local papers = {
+		{ -0.8, 0.45, 0.9, 1.1 },
+		{ 0.5, 0.55, 0.8, 0.8 },
+		{ 0.75, -0.5, 1.0, 1.0 },
+		{ -0.55, -0.6, 0.8, 0.7 },
+	}
+	for i, pp in papers do
+		fine(
+			b.box(
+				"Notice",
+				V(pp[3], pp[4], 0.03),
+				V(pp[1], pp[2], -0.23),
+				Kit.weathered(if i == 3 then Kit.rgb(78, 70, 56) else Kit.rgb(66, 58, 46), 0.08),
+				M.Fabric,
+				CFrame.Angles(0, 0, wear:NextNumber(-0.12, 0.12))
+			)
+		)
+		fine(b.ball("Pin", V(pp[1], pp[2] + pp[4] / 2 - 0.1, -0.27), 0.12, C.IRON, M.Metal))
+	end
+	-- The missing-person notice: a face that is only a darker oval.
+	fine(
+		b.box(
+			"NoticeFace",
+			V(0.45, 0.55, 0.02),
+			V(0.75, -0.35, -0.26),
+			Kit.rgb(40, 36, 32),
+			M.Fabric
+		)
+	)
+	return b.model
+end
+
 return Decor
